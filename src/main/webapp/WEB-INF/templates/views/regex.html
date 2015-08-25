@@ -1,0 +1,107 @@
+<body>
+  <h1>Hello, Do you Want to Build a Spark Cluster?</h1>
+  <h2>And Analyze what's on the Walls?</h2>
+  <div class="container-fluid">
+    <div class='tabs' id="openChaiDemo">
+      <ul>
+        <li><a href='#rule_maker'>Tweak the topics</a></li>
+        <li><a href="#results_table">See the Results</a></li>
+
+      </ul>
+
+      <div id="rule_maker" class = "row-fluid">
+        <div id = "treeBox" class = "col-md-4" >
+          <h2>Pick a rule to tweak, make new rules, or delete old ones</h2>
+
+          <div id="controlBtns" class = 'btn-group' >
+            <a id = "newBranch" class = "btn btn-default" href="#">New</a>
+            <a id = "deleteBranch" class = "btn btn-default" href = "#">Delete</a>
+            <a id = "renameBranch" class = "btn btn-default" href = "#">Rename</a>
+            <a class="btn btn-default" value="Collapse All" onclick="$('#rule_tree').jstree('close_all');">- All</a>
+            <a class="btn btn-default" value="Expand All" onclick="$('#rule_tree').jstree('open_all');">+ All</a>
+          </div>
+            <a id = "updateTree" class = "btn btn-default" href = "#">Get Topic Results</a>
+          <div id='rule_tree'></div>
+        </div>
+        <div id='rule_parts' class='col-md-8 well'>
+          <h2 id='ruleTopic'>Pick a rule to change or build a new one</h2>
+          <form class="form-horizontal">
+            <div class="form-group">
+              <label for="and_01" class="col-sm-2 control-label">Must Have Phrases</label>
+              <div class="col-sm-10">
+                <textarea class=" fat_rule bg-success" id="and_01" rows="4" placeholder="Must Have Phrases"></textarea>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="and_02" class="col-sm-2 control-label">And Must Have These Phrases</label>
+              <div class="col-sm-10">
+                <textarea class=" fat_rule bg-success" id="and_02" rows="4" placeholder="And Must Have These Phrases"></textarea>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="not_01" class="col-sm-2 control-label">Must NOT Have These Phrases</label>
+              <div class="col-sm-10">
+                <textarea class="fat_rule bg-danger" id="not_01" rows="4" placeholder="Must NOT Have These Phrases"></textarea>
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="col-sm-offset-2 col-sm-10">
+                <button type="submit" class="btn btn-default" id="save_rule">Save Rule</button>
+                <!-- Also need to figure out how to just save the rule before clicking on some other topic -->
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div id="results_table" class='rd_table'>
+        <table id="topic_counts" >
+
+        </table>
+      </div>
+    </div>
+  </div>
+
+<div id="deleteRuleModal" class="modal hide">
+  <div class="modal-header">
+    <button type="button" class="close" data-dismiss="modal">×</button>
+    <h3>Are you sure you want to delete this rule?<span class="branch_name_params"></span></h3>
+  </div>
+  <div class="modal-body">
+    <p><h3>Are you positive?  This cannot be undone!</h3></p>
+    <form accept-charset="UTF-8" action="/cat_rules/destroy" class="delete_cat_rule control-group xxlarge" data-remote="true" id="delete_cat_rule" method="Post">
+    <input id="deleted_cat_rule_id" name="id" type="hidden"></input>
+    <!-- <input id="deleted_cat_rule_id" name="cat_rule[_method]" type="hidden" value="delete"></input> -->
+    <input id= "reallyDeleteRule" class="btn btn-primary" name="commit" type="submit" value="Delete Cat rule">
+  </form>
+  </div>
+  <div class="modal-footer">
+    <a href="#" class="btn" data-dismiss="modal" id="closeDeleteRule">Close</a>
+    <!-- <button id="reallyDeleteRule" class="btn btn-primary">Delete Rule</button> -->
+  </div>
+</div>
+<div id="branchParamsModal" class="modal hide">
+  <div class="modal-header">
+    <button type="button" class="close" data-dismiss="modal">×</button>
+    <h3>Current Parameters for<span id="branch_name_params"></span></h3>
+  </div>
+  <div class="modal-body">
+    <p><h3>Update the Branch Type Below</h3></p>
+    <input id="updateParams_branch_type" name="updateParams[branch_type]" type="text">
+
+    <input id="updateParams_cat_branch_id" name="updateParams[cat_branch_id]" type="hidden">
+    <br>
+    <p><h3>Active Branch?<input id="updateParams_hidden_branch" lname="updateParams[hidden_branch]" type="checkbox"></h3>
+      Branches can be removed from view but still used for classification</p>
+
+  </div>
+  <div class="modal-footer">
+    <a href="#" class="btn" data-dismiss="modal">Close</a>
+    <button id="updateBranchParams" class="btn btn-primary">Update Params</button>
+  </div>
+</div>
+
+  <div id="dialog-confirm" title="Delete this branch?"  >
+    <p><span class="ui-icon ui-icon-alert" style="float:left; margin:0 7px 20px 0;"></span><span id="delete-confirm-body">These items </span> will be permanently deleted and cannot be recovered. Are you sure?</p>
+  </div>
+
+</body>

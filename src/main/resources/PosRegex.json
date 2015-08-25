@@ -1,0 +1,4 @@
+{"Party":"(?i-mx:(\\b(party|parties)\\b))",
+          "New Years Eve":"(?i-mx:(\\b(new)\\b))",
+          "Beer":"(?i-mx:(\\b(beer|drunk|drink)\\b))",
+          "Resolutions":"(?i-mx:(\\b(resolution|resolv)\\b))"}

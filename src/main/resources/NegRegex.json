@@ -1,0 +1,2 @@
+{"Party":"(?i-mx:(\\b(birthday)\\b))",
+          "Beer":"(?i-mx:(\\b(bud|budweiser)\\b))"}
