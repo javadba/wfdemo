@@ -20,8 +20,6 @@ import scala.util.parsing.json._
 
 class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJsonSupport */ with ScalateSupport {
 
-//  implicit val formats = Serialization.formats(NoTypeHints)
-
   val logger = LoggerFactory.getLogger(getClass)
   var sc: SparkContext = _
   var rddData: RDD[String] = _
@@ -39,10 +37,11 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
 
   private def displayPage(title: String, content: Seq[Node]) = Template.page(title, content, url(_))
 
+  val title = "Astralync: Twitter Keywords Search"
   get("/") {
     <html>
       <body>
-        <h1>Astralync: Twitter Keywords Search Example</h1>
+        <h1>${title}</h1>
         Say
         <a href="queryForm">Query Form</a>
         .
@@ -53,18 +52,18 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
 
   get("/queryForm") {
     var jsonPos = """
-{"Party":"(?i-mx:(\b(party|parties)\b))",
-          "New Years Eve":"(?i-mx:(\b(new)\b))",
-          "Beer":"(?i-mx:(\b(beer|drunk|drink)\b))",
-          "Resolutions":"(?i-mx:(\b(resolution|resolv)\b))"}
-
+{"iphone":"(?i)(.*iphone.*)",
+              "Twitter":"(?i)(.*Twitter.*)",
+              "love":"(?i)(.*love.*)",
+              "boyz":"(?i)(.*boyz.*)"}
                   """.stripMargin
 
     var jsonNeg = """
-{"Party":"(?i-mx:(\b(birthday)\b))",
-          "Beer":"(?i-mx:(\b(bud|budweiser)\b))"}
+   {"do not":"(?i)(.*do not.*)",
+              "hate":"(?i)(.*hate.*)",
+              "parkside":"(?i)(.*parkside.*)"}
                   """.stripMargin
-    displayPage("OpenChai: Argus Query Example",
+    displayPage(title,
       <form action={url("/query")} method='POST'>
         JsonPos:
         <textarea cols="100" rows="15" name="jsonPos">
@@ -100,7 +99,7 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
 
     try {
       //val data="hdfs://i386:9000/user/stephen/argus/dataSmall"
-      val data = "file:///home/stephen/argus/dataSmall"
+      val data = "file:///shared/demo/data/dataSmall"
       val args: Array[String] = Array("local[32]", /* "spark://192.168.15.43:7077", */ data,
         "2", "1", "false", "/home/stephen/argus/src/posRegex.json", "/home/stephen/argus/src/negRegex.json")
       val DtName = "interaction_created_at"
@@ -256,7 +255,7 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
       val returnMode = params("mode")
       if (returnMode != null && !returnMode.trim.isEmpty()) {
         if (returnMode.equalsIgnoreCase("HTML")) {
-          displayPage("Argus Query Results:",
+          displayPage("Keywords Query Results:",
             // <p>Query: {jsonObject.get.toString}</p>
             <p>Return:
               {retMapJson}
