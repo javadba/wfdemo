@@ -18,21 +18,59 @@ import scala.collection.mutable.{Map => MMap}
 import scala.util.matching.Regex
 import scala.util.parsing.json._
 
-class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJsonSupport */ with ScalateSupport {
+class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJsonSupport */ with ScalateSupport {
 
   val logger = LoggerFactory.getLogger(getClass)
   var sc: SparkContext = _
   var rddData: RDD[String] = _
-  val CacheEnabled = true
+  var cacheEnabled = true
+  var nLoops = 1
+  var groupByFields =  List[String]()
+//  val fakeArgs = "spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true".split(" ")
+  val fakeArgs = "local[32] /shared/demo/data/dataSmall 3 3 true".split(" ")
 
   override def init(config: ServletConfig) = {
     super.init(config)
     // val master = s"spark://${java.net.InetAddress.getLocalHost.getHostName}:7077"
     // var conf = new SparkConf().setMaster("spark://192.168.15.43:7077").setAppName("Connector Stable")
-    var conf = new SparkConf().setMaster("local[32]").setAppName("Connector Stable")
-    conf.set("spark.driver.memory", "10g")
+//    var conf = new SparkConf().setMaster("local[32]").setAppName("Connector Stable")
+//    conf.set("spark.driver.memory", "10g")
+//    sc = new SparkContext(conf)
+//    println(s"Connecting to master=${conf.get("spark.master")}..")
+  }
+
+  def connect(args: Array[String]): SparkContext = {
+    if (sc != null) {
+      return sc
+    }
+    // var conf = new SparkConf("/home/stephen/spark-1.4.2/conf/spark-defaults.conf").setAppName("Argus") // .setMaster(master)
+    //var conf = new SparkConf(true).setAppName("Argus") // .setMaster(master)
+    if (args.length == 0) {
+      System.err.println( """Usage: RegexFilters <master> <datadir> <#partitions> <#loops> <cacheEnabled true/false> <groupByFields separated by commas no spaces>
+        e.g. RegexFilters spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true posregexFile.json negregexfile.json interaction_created_at,state_province""")
+      //      System.exit(1)
+    }
+    val homeDir = "/home/stephen"
+    val master = args(0)
+    val dataFile = if (args.length >= 2) args(1) else s"$homeDir/argus/CitiesBaselineCounts2015010520150112.csv"
+    val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
+    nLoops = if (args.length >= 4) args(3).toInt else 3
+    cacheEnabled = if (args.length >= 5) args(4).toBoolean else false
+    groupByFields = if (args.length >= 8) args(7).split(",").toList else List()
+    // val master = s"spark://${java.net.InetAddress.getLocalHost.getHostName}:7077"
+    // var conf = new SparkConf().setMaster("spark://192.168.15.43:7077").setAppName("Connector Stable")
+    var conf = new SparkConf().setMaster(master).setAppName("KeywordsConnector")
+//    conf.set("spark.driver.memory", "10g")
+//    println(s"Connecting to master=${conf.get("spark.master")}..")
     sc = new SparkContext(conf)
-    println(s"Connecting to master=${conf.get("spark.master")}..")
+    println(s"Connecting to master=${sc.getConf.get("spark.master")} reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
+    if (rddData == null) {
+      rddData = sc.textFile(dataFile, nparts)
+    }
+    if (cacheEnabled) {
+      rddData.cache()
+    }
+    sc
   }
 
   private def displayPage(title: String, content: Seq[Node]) = Template.page(title, content, url(_))
@@ -41,7 +79,9 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
   get("/") {
     <html>
       <body>
-        <h1>${title}</h1>
+        <h1>$
+          {title}
+        </h1>
         Say
         <a href="queryForm">Query Form</a>
         .
@@ -51,6 +91,7 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
 
 
   get("/queryForm") {
+    connect(fakeArgs)
     var jsonPos = """
 {"iphone":"(?i)(.*iphone.*)",
               "Twitter":"(?i)(.*Twitter.*)",
@@ -78,8 +119,12 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
         Mode:
         <input type="radio" name="mode" label="HTML" value="html"/>
         HTML
-        <input type="radio" name="mode" label="JSON" value="json"/>
+        <input type="radio" name="mode" label="JSON" value="json" checked="true"/>
         JSON
+        <p/>
+        Backend/Spark options:
+        <input type="text" length="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
+        <!--        Backend/Spark options: <input type="text" name="cmdline">spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true</input> -->
         <p/>
         <input type='submit'/>
       </form>
@@ -139,7 +184,6 @@ class KeywordsServlet extends KeywordsStack  with Serializable /* with JacksonJs
       val dataFile = if (args.length >= 2) args(1) else s"$homeDir/argus/CitiesBaselineCounts2015010520150112.csv"
       val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
       val nloops = if (args.length >= 4) args(3).toInt else 3
-      val cacheEnabled = CacheEnabled // if (args.length >= 5) args(4).toBoolean else false
       // GROUP BY FIELDS: will drive the grouping key's!
       val posRegex = /* if (args.length >= 6) scala.io.Source.fromFile(args(5)).mkString("") else */ JsonPosRegex
       val negRegex = /* if (args.length >= 7) scala.io.Source.fromFile(args(6)).mkString("") else */ JsonNegRegex
