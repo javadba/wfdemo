@@ -1,6 +1,7 @@
 package com.astralync.demo
 
 //import net.liftweb.json.{NoTypeHints, Serialization}
+
 import org.scalatra.scalate.ScalateSupport
 import org.slf4j.LoggerFactory
 
@@ -25,18 +26,20 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
   var rddData: RDD[String] = _
   var cacheEnabled = true
   var nLoops = 1
-  var groupByFields =  List[String]()
-//  val fakeArgs = "spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true".split(" ")
+  var groupByFields = List[String]()
+  val InteractionField = "interaction_created_at"
+  val DtNames = s"$InteractionField state_province"
+  //  val fakeArgs = "spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true".split(" ")
   val fakeArgs = "local[32] /shared/demo/data/dataSmall 3 3 true".split(" ")
 
   override def init(config: ServletConfig) = {
     super.init(config)
     // val master = s"spark://${java.net.InetAddress.getLocalHost.getHostName}:7077"
     // var conf = new SparkConf().setMaster("spark://192.168.15.43:7077").setAppName("Connector Stable")
-//    var conf = new SparkConf().setMaster("local[32]").setAppName("Connector Stable")
-//    conf.set("spark.driver.memory", "10g")
-//    sc = new SparkContext(conf)
-//    println(s"Connecting to master=${conf.get("spark.master")}..")
+    //    var conf = new SparkConf().setMaster("local[32]").setAppName("Connector Stable")
+    //    conf.set("spark.driver.memory", "10g")
+    //    sc = new SparkContext(conf)
+    //    println(s"Connecting to master=${conf.get("spark.master")}..")
   }
 
   def connect(args: Array[String]): SparkContext = {
@@ -60,8 +63,8 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
     // val master = s"spark://${java.net.InetAddress.getLocalHost.getHostName}:7077"
     // var conf = new SparkConf().setMaster("spark://192.168.15.43:7077").setAppName("Connector Stable")
     var conf = new SparkConf().setMaster(master).setAppName("KeywordsConnector")
-//    conf.set("spark.driver.memory", "10g")
-//    println(s"Connecting to master=${conf.get("spark.master")}..")
+    //    conf.set("spark.driver.memory", "10g")
+    //    println(s"Connecting to master=${conf.get("spark.master")}..")
     sc = new SparkContext(conf)
     println(s"Connecting to master=${sc.getConf.get("spark.master")} reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
     if (rddData == null) {
@@ -72,6 +75,8 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
     }
     sc
   }
+
+  val headers = List(InteractionField, "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone", "twitter_user_statuses_count", "twitter_user_friends_count", "state_province")
 
   private def displayPage(title: String, content: Seq[Node]) = Template.page(title, content, url(_))
 
@@ -92,29 +97,20 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
 
   get("/queryForm") {
     connect(fakeArgs)
-    var jsonPos = """
-{"iphone":"(?i)(.*iphone.*)",
-              "Twitter":"(?i)(.*Twitter.*)",
-              "love":"(?i)(.*love.*)",
-              "boyz":"(?i)(.*boyz.*)"}
-                  """.stripMargin
+    val posKeywords = """iphone twitter love boyz"""
 
-    var jsonNeg = """
-   {"do not":"(?i)(.*do not.*)",
-              "hate":"(?i)(.*hate.*)",
-              "parkside":"(?i)(.*parkside.*)"}
-                  """.stripMargin
+    val negKeywords = """don't hate parkside"""
+    val gval = DtNames
     displayPage(title,
       <form action={url("/query")} method='POST'>
-        JsonPos:
-        <textarea cols="100" rows="15" name="jsonPos">
-          {jsonPos}
-        </textarea>
-        <p/>
-        JsonNeg:
-        <textarea cols="100" rows="15" name="jsonNeg">
-          {jsonNeg}
-        </textarea>
+        <table>
+        <tr><td>Included Keywords:</td><td>Excluded Keywords:</td></tr>
+        <tr><td> <textarea cols="50" rows="3" name="jsonPos">
+          {posKeywords}
+        </textarea></td>
+         <td> <textarea cols="100" rows="2" name="jsonNeg"> {negKeywords} </textarea></td>
+          </tr>
+          </table>
         <p/>
         Mode:
         <input type="radio" name="mode" label="HTML" value="html"/>
@@ -122,8 +118,20 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
         <input type="radio" name="mode" label="JSON" value="json" checked="true"/>
         JSON
         <p/>
+        Grouping Fields:
+        <input type="text" size="80" name="grouping" value={gval}/>
+        <p/>
+        <p>All fields:
+          <font size="-1">
+            {headers.mkString(" ,")}
+          </font>
+        </p>
+        <p/>
+        MinCount for Groups:&nbsp;
+          <input type="text" size="4" name="mincount" value="2"/>
+        <p/>
         Backend/Spark options:
-        <input type="text" length="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
+        <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
         <!--        Backend/Spark options: <input type="text" name="cmdline">spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true</input> -->
         <p/>
         <input type='submit'/>
@@ -147,10 +155,11 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
       val data = "file:///shared/demo/data/dataSmall"
       val args: Array[String] = Array("local[32]", /* "spark://192.168.15.43:7077", */ data,
         "2", "1", "false", "/home/stephen/argus/src/posRegex.json", "/home/stephen/argus/src/negRegex.json")
-      val DtName = "interaction_created_at"
       // John you need to set this to an input HttpReqParam
       val JsonPosRegex: String = if (params.contains("jsonPos")) {
-        params("jsonPos")
+        params("jsonPos").split(" ").map(_.trim).filter(_.length > 0).map(k =>
+          s""" "$k":"(?i)(.*$k.*)" """)
+          .mkString("{", ",\n", "}\n")
       } else {
         """{"Party":"(?i-mx:(\\b(party|parties)\\b))",
               "New Years Eve":"(?i-mx:(\\b(new)\\b))",
@@ -162,7 +171,10 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
 
       // John you need to set this to an input HttpReqParam
       val JsonNegRegex: String = if (params.contains("jsonNeg")) {
-        params("jsonNeg")
+        params("jsonNeg").split(" ").map(_.trim).filter(_.length > 0).map(k =>
+          s""" "$k":"(?i)(.*$k.*)" """)
+          .mkString("{", ",\n", "}\n")
+
       } else {
         """{"Party":"(?i-mx:(\\b(birthday)\\b))",
           "Beer":"(?i-mx:(\\b(bud|budweiser)\\b))"}
@@ -171,7 +183,6 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
       println(s"${JsonNegRegex}");
       println(s"${JsonNegRegex.getClass.getSimpleName}");
 
-      val headers = List("interaction_created_at", "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone", "twitter_user_statuses_count", "twitter_user_friends_count", "state_province")
       val headersOrderMap = (0 until headers.length).zip(headers).toMap
       val headersNameMap = headers.zip(0 until headers.length).toMap
 
@@ -187,7 +198,8 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
       // GROUP BY FIELDS: will drive the grouping key's!
       val posRegex = /* if (args.length >= 6) scala.io.Source.fromFile(args(5)).mkString("") else */ JsonPosRegex
       val negRegex = /* if (args.length >= 7) scala.io.Source.fromFile(args(6)).mkString("") else */ JsonNegRegex
-      val groupByFields = if (args.length >= 8) args(7).split(",").toList else List()
+      val groupByFields = params("grouping").split("\\s").toSeq
+      val minCount = params("mincount").toInt
       // var conf = new SparkConf("/home/stephen/spark-1.4.2/conf/spark-defaults.conf").setAppName("Argus") // .setMaster(master)
       //var conf = new SparkConf(true).setAppName("Argus") // .setMaster(master)
       println(s"Connecting to master=${sc.getConf.get("spark.master")} reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
@@ -219,9 +231,11 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
           }
         }
 
-        val bc = sc.broadcast((posRegexMap, negRegexMap, headers, groupByFields))
+        val bc = sc.broadcast((posRegexMap, negRegexMap, headers, groupByFields, DtNames,
+          InteractionField, minCount))
         val filtersRdd = rddData.mapPartitionsWithIndex({ case (rx, iter) =>
-          val (locPosMap, locNegMap, locHeaders, locGroupingFields) = bc.value
+          val (locPosMap, locNegMap, locHeaders, locGroupingFields, locDtNames,
+          locInteractionField, locMinCount) = bc.value
           def parseLine(iline: String, headersList: List[String]):
           Option[Map[String, String]] = {
             val line = iline.trim
@@ -232,16 +246,25 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
               None
             } else {
               val lmap = locHeaders.zip(line.split(",").map(_.replace("\"", ""))).toMap
-              val nmap = lmap.updated(DtName, formatDate(lmap(DtName)))
+              val nmap = lmap.updated(locInteractionField,
+                formatDate(lmap(locInteractionField)))
               Some(nmap)
             }
           }
-          def genKey(k: String, groupingFields: List[String], lmap: Map[String, String]) = {
-            if (groupingFields.length == 0) {
+          def genKey(k: String, groupingFields: Seq[String], lmap: Map[String, String]) = {
+            if (groupingFields.isEmpty) {
               k
             } else {
-              val groupKey = groupingFields.map(f => lmap(f)).mkString("-")
-              s"$k->$groupKey"
+              val groupKey = groupingFields.map { f =>
+                System.err.println(s"f=$f")
+                if (!lmap.contains(f)) {
+                  System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
+                  k
+                } else {
+                  s"$k->${lmap(f)}"
+                }
+              }
+              groupKey.mkString("-")
             }
           }
 
@@ -285,7 +308,7 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
         val outRdd = filtersRdd.filter(l => l.length > 0 && !l.isEmpty)
         //println(outRdd.take(20).mkString(","))
         //outRdd.take(20).foreach{ l => println(s"len is ${l.length}")}
-        val lrdd = outRdd.flatMap { x => x }.countByKey()
+        val lrdd = outRdd.flatMap { x => x }.countByKey().filter { case (k, v) => v >= minCount }
         countedRdd = Map(lrdd.toList: _*)
         val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
         durations += duration
@@ -360,9 +383,7 @@ object Template {
         <link href="/assets/css/bootstrap.css" rel="stylesheet"/>
         <link href="/assets/css/bootstrap-responsive.css" rel="stylesheet"/>
         <link href="/assets/css/syntax.css" rel="stylesheet"/>
-        <link href="/assets/css/scalatra.css" rel="stylesheet"/>
-
-        {head}
+        <link href="/assets/css/scalatra.css" rel="stylesheet"/>{head}
       </head>
 
       <body>
