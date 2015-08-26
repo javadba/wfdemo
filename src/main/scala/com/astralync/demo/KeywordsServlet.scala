@@ -28,7 +28,8 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
   var nLoops = 1
   var groupByFields = List[String]()
   val InteractionField = "interaction_created_at"
-  val DtNames = s"$InteractionField state_province"
+  val DtNames = s"$InteractionField twitter_user_lang"
+//  val DtNames = s"$InteractionField state_province"
   //  val fakeArgs = "spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true".split(" ")
   val fakeArgs = "local[32] /shared/demo/data/dataSmall 3 3 true".split(" ")
 
@@ -76,7 +77,7 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
     sc
   }
 
-  val headers = List(InteractionField, "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone", "twitter_user_statuses_count", "twitter_user_friends_count", "state_province")
+  val headers = List(InteractionField, "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone",  "twitter_user_statuses_count", "twitter_user_friends_count",  "state_province")
 
   private def displayPage(title: String, content: Seq[Node]) = Template.page(title, content, url(_))
 
@@ -128,7 +129,7 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
         </p>
         <p/>
         MinCount for Groups:&nbsp;
-          <input type="text" size="4" name="mincount" value="2"/>
+          <input type="text" size="6" name="mincount" value="20"/>
         <p/>
         Backend/Spark options:
         <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
@@ -151,20 +152,19 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
   post("/query") {
 
     try {
+
+      val args = params("cmdline").split("\\s").map(_.trim)
       //val data="hdfs://i386:9000/user/stephen/argus/dataSmall"
-      val data = "file:///shared/demo/data/dataSmall"
-      val args: Array[String] = Array("local[32]", /* "spark://192.168.15.43:7077", */ data,
-        "2", "1", "false", "/home/stephen/argus/src/posRegex.json", "/home/stephen/argus/src/negRegex.json")
+//      val data = "file:///shared/demo/data/dataSmall"
+//      val args: Array[String] = Array("local[32]", /* "spark://192.168.15.43:7077", */ data,
+//        "2", "1", "false", "/home/stephen/argus/src/posRegex.json", "/home/stephen/argus/src/negRegex.json")
       // John you need to set this to an input HttpReqParam
       val JsonPosRegex: String = if (params.contains("jsonPos")) {
         params("jsonPos").split(" ").map(_.trim).filter(_.length > 0).map(k =>
           s""" "$k":"(?i)(.*$k.*)" """)
           .mkString("{", ",\n", "}\n")
       } else {
-        """{"Party":"(?i-mx:(\\b(party|parties)\\b))",
-              "New Years Eve":"(?i-mx:(\\b(new)\\b))",
-              "Beer":"(?i-mx:(\\b(beer|drunk|drink)\\b))",
-              "Resolutions":"(?i-mx:(\\b(resolution|resolv)\\b))"}"""
+        throw new IllegalArgumentException("Missing the keyword parameter jsonPos")
       }
       println(s"${JsonPosRegex}");
       println(s"${JsonPosRegex.getClass.getSimpleName}");
@@ -176,9 +176,7 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
           .mkString("{", ",\n", "}\n")
 
       } else {
-        """{"Party":"(?i-mx:(\\b(birthday)\\b))",
-          "Beer":"(?i-mx:(\\b(bud|budweiser)\\b))"}
-        """
+        throw new IllegalArgumentException("Missing the keyword parameter jsonNeg")
       }
       println(s"${JsonNegRegex}");
       println(s"${JsonNegRegex.getClass.getSimpleName}");
@@ -188,11 +186,13 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
 
       if (args.length == 0) {
         System.err.println( """Usage: RegexFilters <master> <datadir> <#partitions> <#loops> <cacheEnabled true/false> <groupByFields separated by commas no spaces>
-        e.g. RegexFilters spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true posregexFile.json negregexfile.json interaction_created_at,state_province""")
-        System.exit(1)
+        e.g. RegexFilters spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/argus/data500mb 56 3 true posregexFile.json negregexfile.json interaction_created_at,state_province""")
+        System.exit(0)
       }
       val homeDir = "/home/stephen"
-      val dataFile = if (args.length >= 2) args(1) else s"$homeDir/argus/CitiesBaselineCounts2015010520150112.csv"
+      val dataFile = if (args.length >= 2) args(1)
+          else throw new IllegalArgumentException("Missing datafile parameter")
+
       val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
       val nloops = if (args.length >= 4) args(3).toInt else 3
       // GROUP BY FIELDS: will drive the grouping key's!
@@ -204,9 +204,9 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
       //var conf = new SparkConf(true).setAppName("Argus") // .setMaster(master)
       println(s"Connecting to master=${sc.getConf.get("spark.master")} reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
       println(s"PosRegex=$posRegex\nNegRegex=$negRegex")
-      if (rddData == null) {
+      //if (rddData == null) {
         rddData = sc.textFile(dataFile, nparts)
-      }
+      //}
       if (cacheEnabled) {
         rddData.cache()
       }
@@ -237,7 +237,7 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
           val (locPosMap, locNegMap, locHeaders, locGroupingFields, locDtNames,
           locInteractionField, locMinCount) = bc.value
           def parseLine(iline: String, headersList: List[String]):
-          Option[Map[String, String]] = {
+            Option[Map[String, String]] = {
             val line = iline.trim
             def formatDate(dt: String) = {
               s"${dt.slice(0, 4)}-${dt.slice(8, 10)}-${dt.slice(5, 7)}"
@@ -256,15 +256,15 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
               k
             } else {
               val groupKey = groupingFields.map { f =>
-                System.err.println(s"f=$f")
+//                System.err.println(s"f=$f")
                 if (!lmap.contains(f)) {
                   System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
                   k
                 } else {
-                  s"$k->${lmap(f)}"
+                  lmap(f)
                 }
               }
-              groupKey.mkString("-")
+              (k +: groupKey).mkString("-")
             }
           }
 
@@ -289,7 +289,7 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
                     val lmap = parseLine(line, locHeaders)
                     if (lmap.isDefined) {
                       val oval = genKey(k, locGroupingFields, lmap.get)
-                      println(s"accepting line $line")
+//                      println(s"accepting line $line")
                       Some((oval, 1))
                     } else {
                       None
@@ -301,13 +301,13 @@ class KeywordsServlet extends KeywordsStack with Serializable /* with JacksonJso
               }
               rout
             }
-            println(s"For partition=$rx  number of lines processed=$nlines")
+            if (nlines % 1000 == 1) {
+              println(s"For partition=$rx  number of lines processed=$nlines")
+            }
             posFiltered.toList.flatten
           }
         }, true)
         val outRdd = filtersRdd.filter(l => l.length > 0 && !l.isEmpty)
-        //println(outRdd.take(20).mkString(","))
-        //outRdd.take(20).foreach{ l => println(s"len is ${l.length}")}
         val lrdd = outRdd.flatMap { x => x }.countByKey().filter { case (k, v) => v >= minCount }
         countedRdd = Map(lrdd.toList: _*)
         val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
