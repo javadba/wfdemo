@@ -2,7 +2,9 @@ package com.astralync.demo.spark
 
 import java.util.Date
 
+import com.astralync.demo.spark.web.DemoHttpServer
 import org.apache.spark.{SparkConf, SparkContext}
+import unfiltered.response.ResponseString
 
 import scala.collection.mutable
 import scala.collection.mutable.{Map => MMap}
@@ -24,13 +26,38 @@ import scala.util.parsing.json.JSON
  * limitations under the License.
  */
 
+import unfiltered.netty._
+
 /**
  * RegexFilters
  *
  */
 object RegexFilters {
 
+  val DefaultPort = 8180
+  val DefaultCtx = "/wfdemo"
+
   def main(args: Array[String]) = {
+//    submit(args)
+    startWebServer
+    Thread.currentThread.join
+  }
+
+  private var webServer: DemoHttpServer = _
+  def startWebServer() = {
+    webServer = new DemoHttpServer().run(Map("port" -> DefaultPort, "ctx" -> DefaultCtx))
+  }
+//  def startNettyWebServer() = {
+//    import unfiltered.request._
+//    import unfiltered.response._
+//    val hello = unfiltered.netty.cycle.Planify {
+//       case _ => ResponseString("hello world")
+//    }
+//    unfiltered.netty.Server.http(8080).plan(hello).run()
+//  }
+//
+
+  def submit(args: Array[String]) = {
     val DtName = "interaction_created_at"
     // John you need to set this to an input HttpReqParam
     val JsonPosRegex = """{"Party":"(?i-mx:(\\b(party|parties)\\b))",
@@ -146,10 +173,12 @@ object RegexFilters {
       durations += duration
       println(s"** RESULT for loop ${nloop + 1}:  ${countedRdd.mkString(",")} duration=$duration secs *** ")
     }
-    println(s"** Test Completed. Loop durations=${durations.mkString(",")} ** ")
+    val res = durations.mkString(",")
+    println(s"** Test Completed. Loop durations=$res ** ")
     if (sc2 != null) {
       sc2.stop()
     }
+    res
   }
 
 }

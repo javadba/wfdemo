@@ -139,6 +139,22 @@
             <artifactId>scalatest_2.11</artifactId>
             <version>2.2.5</version>
         </dependency>
+        <dependency>
+          <groupId>net.databinder</groupId>
+          <artifactId>unfiltered-filter_2.11</artifactId>
+          <version>0.8.4</version>
+        </dependency>
+        <dependency>
+          <groupId>net.databinder</groupId>
+          <artifactId>unfiltered-netty_2.11</artifactId>
+          <version>0.8.4</version>
+        </dependency>
+        <dependency>
+            <groupId>org.specs2</groupId>
+            <artifactId>scalatra-specs2</artifactId>
+            <version>2.4.0.RC1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>

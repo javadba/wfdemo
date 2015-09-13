@@ -23,13 +23,14 @@ object KeywordsservletBuild extends Build {
       resolvers += Classpaths.typesafeReleases,
       resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases",
       libraryDependencies ++= Seq(
-        "org.apache.spark" %% "spark-core" % "1.4.1",
+        "org.apache.spark" %% "spark-core" % "1.5.0",
         "org.scalatra" %% "scalatra" % ScalatraVersion,
         "org.scalatra" %% "scalatra-scalate" % ScalatraVersion,
         "org.scalatra" %% "scalatra-specs2" % ScalatraVersion % "test",
         "ch.qos.logback" % "logback-classic" % "1.1.2" % "runtime",
         "org.eclipse.jetty" % "jetty-webapp" % "9.2.10.v20150310" % "container",
-        "javax.servlet" % "javax.servlet-api" % "3.1.0" % "provided"
+        "javax.servlet" % "javax.servlet-api" % "3.1.0" % "provided",
+        "net.databinder" % "unfiltered-netty_2.11" % "0.8.4"
       ),
       scalateTemplateConfig in Compile <<= (sourceDirectory in Compile){ base =>
         Seq(
