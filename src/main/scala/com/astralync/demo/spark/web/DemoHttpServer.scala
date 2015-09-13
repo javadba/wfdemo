@@ -59,9 +59,10 @@ class RootHandler extends HttpHandler {
 //    System.err.println(s"Received [$cmd]")
   private def process(params: Map[String,String]) = {
     val eparams = params.mapValues(pv=> URLDecoder.decode(pv))
-    val cmdline = eparams("cmdline")
+    val cmdline = eparams("cmdline").split(" ")
+
     System.err.println(s"Received ${cmdline}  [${eparams.mkString(",")}]")
-    val res = RegexFilters.submit(cmdline.split(" "))
+    val res = RegexFilters.submit(cmdline)
     System.err.println(s"Result: ${res.substring(0,math.min(MaxPrint, res.length))}")
     res
   }
