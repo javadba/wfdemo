@@ -47,8 +47,11 @@ class RootHandler extends HttpHandler {
 
   def handle(t: HttpExchange) {
 //    val res = process(t.getRequestBody)
-    val params = t.getRequestURI.getQuery.split("&")
-    val res = process(params.map(_.split("=")).map{ a => (a(0),a(1))}.toMap)
+    val rparams = t.getRequestURI.getQuery.split("&")
+    val params = if (rparams.nonEmpty) rparams
+          else HttpUtils.readStream(t.getRequestBody).split("&")
+    val pmap = params.map(_.split("=")).map{ a => (a(0),a(1))}.toMap
+    val res = process(pmap)
     sendResponse(t, res)
   }
 

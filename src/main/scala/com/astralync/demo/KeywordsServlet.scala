@@ -6,6 +6,7 @@ import java.io.Serializable
 import java.net.{URLEncoder, InetAddress}
 import javax.servlet._
 
+import com.astralync.demo.spark.web.HttpUtils
 import org.apache.spark.SparkContext
 import org.scalatra.scalate.ScalateSupport
 import org.slf4j.LoggerFactory
@@ -116,7 +117,7 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val JsonPosRegex: String = if (params.contains("jsonPos")) {
         params("jsonPos").split(" ").map(_.trim).filter(_.length > 0).map(k =>
           s""" "$k":"(?i)(.*$k.*)" """)
-          .mkString("{", ",\n", "}\n")
+          .mkString("{", ",", "}")
       } else {
         throw new IllegalArgumentException("Missing the keyword parameter jsonPos")
       }
@@ -127,7 +128,7 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val JsonNegRegex: String = if (params.contains("jsonNeg")) {
         params("jsonNeg").split(" ").map(_.trim).filter(_.length > 0).map(k =>
           s""" "$k":"(?i)(.*$k.*)" """)
-          .mkString("{", ",\n", "}\n")
+          .mkString("{", ",", "}")
 
       } else {
         throw new IllegalArgumentException("Missing the keyword parameter jsonNeg")
@@ -157,11 +158,16 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       // var conf = new SparkConf("/home/stephen/spark-1.4.2/conf/spark-defaults.conf").setAppName("Argus") // .setMaster(master)
       //var conf = new SparkConf(true).setAppName("Argus") // .setMaster(master)
 
-      val eparams = params.mapValues( pv => URLEncoder.encode(pv))
-      val url = s"$RegexUrl?cmdline=${eparams("cmdline")}&mincount=$minCount&groupByFields=${eparams("grouping")}"
+      val cmdline = URLEncoder.encode(params("cmdline") + Seq("",JsonPosRegex, JsonNegRegex, groupByFields, minCount).mkString(" "))
+      import collection.mutable
+      val rparams = mutable.Map[String,String](params.toSeq:_*)
+      rparams.update("cmdline", cmdline)
+//      val eparams = params.mapValues( pv => URLEncoder.encode(pv))
+//      val url = s"$RegexUrl?cmdline=$cmdline&mincount=$minCount&groupByFields=${eparams("grouping")}"
+      val url = RegexUrl
       println(s"Url=$url")
-      val retMapJson = scala.io.Source.fromURL(url).mkString
-      val returnMode = eparams("mode")
+      val retMapJson = HttpUtils.post(url, Map(rparams.toSeq:_*))
+      val returnMode = rparams("mode")
       if (returnMode != null && !returnMode.trim.isEmpty()) {
         if (returnMode.equalsIgnoreCase("HTML")) {
           displayPage("Keywords Query Results:",

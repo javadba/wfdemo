@@ -79,7 +79,6 @@ object RegexFilters {
     val JsonNegRegex = """{"Party":"(?i-mx:(\\b(birthday)\\b))",
           "Beer":"(?i-mx:(\\b(bud|budweiser)\\b))"}
                        """
-
     val headers = List("interaction_created_at", "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone", "twitter_user_statuses_count", "twitter_user_friends_count", "state_province")
     val headersOrderMap = (0 until headers.length).zip(headers).toMap
     val headersNameMap = headers.zip(0 until headers.length).toMap
