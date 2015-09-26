@@ -5,7 +5,6 @@ import java.util.Date
 import com.astralync.demo.spark.web.DemoHttpServer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
-import unfiltered.response.ResponseString
 
 import scala.collection.mutable
 import scala.collection.mutable.{Map => MMap}
@@ -27,8 +26,6 @@ import scala.util.parsing.json._
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import unfiltered.netty._
 
 /**
  * RegexFilters
@@ -93,9 +90,7 @@ object RegexFilters {
       val d = new Date
       println(s"** Loop #${nloop + 1} starting at $d **")
       val resultMap = MMap[String, Any]()
-      val posJson= posRegEx // posKeywords.split(" ").map { k =>
-//        s""""$k":"(?i-mx:(\\b($k)\\b))""""
-//      }.mkString("{",",","}")
+      val posJson= posRegEx
       val jsonPos = JSON.parseFull(posJson)
       val posRegexMap = jsonPos.map { m =>
         val p = m.asInstanceOf[Map[String, Any]]
@@ -103,9 +98,7 @@ object RegexFilters {
           (k, v.asInstanceOf[String].r)
         }
       }
-      val negJson= negRegEx // negKeywords.split(" ").map { k =>
-//        s""""$k":"(?i-mx:(\\b($k)\\b))""""
-//      }.mkString("{",",","}")
+      val negJson= negRegEx
       val jsonNeg = JSON.parseFull(negJson)
       val negRegexMap = jsonNeg.map { m =>
         m.asInstanceOf[Map[String, Any]].map { case (k, v) =>
@@ -138,7 +131,6 @@ object RegexFilters {
             k
           } else {
             val groupKey = groupingFields.map { f =>
-              //                System.err.println(s"f=$f")
               if (!lmap.contains(f)) {
                 System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
                 k

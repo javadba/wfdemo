@@ -1,7 +1,5 @@
 package com.astralync.demo
 
-//import net.liftweb.json.{NoTypeHints, Serialization}
-
 import java.io.Serializable
 import java.net.{URLEncoder, InetAddress}
 import javax.servlet._
@@ -34,6 +32,83 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
 
   private def displayPage(title: String, content: Seq[Node]) = Template.page(title, content, url(_))
 
+  val RegexUrl=s"http://${InetAddress.getLocalHost.getHostName}:8180/wfdemo"
+  post("/query") {
+
+    try {
+
+      val args = params("cmdline").split("\\s").map(_.trim)
+      val JsonPosRegex: String = if (params.contains("jsonPos")) {
+        params("jsonPos").split(" ").map(_.trim).filter(_.length > 0).map(k =>
+          s""" "$k":"(?i)(.*$k.*)" """)
+          .mkString("{", ",", "}")
+      } else {
+        throw new IllegalArgumentException("Missing the keyword parameter jsonPos")
+      }
+      println(s"${JsonPosRegex}");
+      println(s"${JsonPosRegex.getClass.getSimpleName}");
+
+      val JsonNegRegex: String = if (params.contains("jsonNeg")) {
+        params("jsonNeg").split(" ").map(_.trim).filter(_.length > 0).map(k =>
+          s""" "$k":"(?i)(.*$k.*)" """)
+          .mkString("{", ",", "}")
+
+      } else {
+        throw new IllegalArgumentException("Missing the keyword parameter jsonNeg")
+      }
+      println(s"${JsonNegRegex}");
+      println(s"${JsonNegRegex.getClass.getSimpleName}");
+
+      val headersOrderMap = (0 until headers.length).zip(headers).toMap
+      val headersNameMap = headers.zip(0 until headers.length).toMap
+
+      val dataFile = if (args.length >= 2) args(1)
+          else throw new IllegalArgumentException("Missing datafile parameter")
+
+      val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
+      val nloops = if (args.length >= 4) args(3).toInt else 3
+      val posRegex = JsonPosRegex
+      val negRegex = JsonNegRegex
+      val groupByFields = params("grouping").replace(" ",",")
+      val minCount = params("mincount").toInt
+      val cmdline = params("cmdline") + Seq("",groupByFields, minCount).mkString(" ")
+      import collection.mutable
+      val rparams = mutable.Map[String,String](params.toSeq:_*)
+      rparams.update("cmdline", cmdline)
+      rparams.update("jsonNeg", JsonNegRegex)
+      rparams.update("jsonPos", JsonPosRegex)
+      val url = RegexUrl
+      println(s"Url=$url params=${params.mkString(",")}")
+      val retMapJson = HttpUtils.post(url, Map(rparams.toSeq:_*))
+      val returnMode = rparams("mode")
+      if (returnMode != null && !returnMode.trim.isEmpty()) {
+        if (returnMode.equalsIgnoreCase("HTML")) {
+          displayPage("Keywords Query Results:",
+            <p>Return:
+              {retMapJson.toList}
+            </p>
+              <pre>Route: /query</pre>
+          )
+        }
+        else {
+          response.setContentType("application/json")
+          response.setContentLength(retMapJson.toString().length())
+          response.writer.print(retMapJson.toString())
+        }
+      }
+      else {
+        response.setContentType("application/json")
+        response.setContentLength(retMapJson.toString().length())
+        response.writer.print(retMapJson.toString())
+      }
+    } catch {
+      case e: Exception =>
+        System.err.println("got exception")
+        e.printStackTrace
+    }
+
+  }
+
   val title = "Astralync: Twitter Keywords Search"
   get("/") {
     <html>
@@ -48,10 +123,8 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
     </html>
   }
 
-
   get("/queryForm") {
     val posKeywords = """iphone twitter love boyz"""
-
     val negKeywords = """don't hate parkside"""
     val gval = DtNames
     displayPage(title,
@@ -85,7 +158,6 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
         <p/>
         Backend/Spark options:
         <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
-        <!--        Backend/Spark options: <input type="text" name="cmdline">spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true</input> -->
         <p/>
         <input type='submit'/>
       </form>
@@ -93,102 +165,8 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
     )
   }
 
-
   get("/demo") {
-
     contentType = "text/html"
-
-  }
-
-
-  val RegexUrl=s"http://${InetAddress.getLocalHost.getHostName}:8180/wfdemo"
-  post("/query") {
-
-    try {
-
-      val args = params("cmdline").split("\\s").map(_.trim)
-      //val data="hdfs://i386:9000/user/stephen/argus/dataSmall"
-//      val data = "file:///shared/demo/data/dataSmall"
-//      val args: Array[String] = Array("local[32]", /* "spark://192.168.15.43:7077", */ data,
-//        "2", "1", "false", "/home/stephen/argus/src/posRegex.json", "/home/stephen/argus/src/negRegex.json")
-      // John you need to set this to an input HttpReqParam
-      val JsonPosRegex: String = if (params.contains("jsonPos")) {
-        params("jsonPos").split(" ").map(_.trim).filter(_.length > 0).map(k =>
-          s""" "$k":"(?i)(.*$k.*)" """)
-          .mkString("{", ",", "}")
-      } else {
-        throw new IllegalArgumentException("Missing the keyword parameter jsonPos")
-      }
-      println(s"${JsonPosRegex}");
-      println(s"${JsonPosRegex.getClass.getSimpleName}");
-
-      // John you need to set this to an input HttpReqParam
-      val JsonNegRegex: String = if (params.contains("jsonNeg")) {
-        params("jsonNeg").split(" ").map(_.trim).filter(_.length > 0).map(k =>
-          s""" "$k":"(?i)(.*$k.*)" """)
-          .mkString("{", ",", "}")
-
-      } else {
-        throw new IllegalArgumentException("Missing the keyword parameter jsonNeg")
-      }
-      println(s"${JsonNegRegex}");
-      println(s"${JsonNegRegex.getClass.getSimpleName}");
-
-      val headersOrderMap = (0 until headers.length).zip(headers).toMap
-      val headersNameMap = headers.zip(0 until headers.length).toMap
-
-      val dataFile = if (args.length >= 2) args(1)
-          else throw new IllegalArgumentException("Missing datafile parameter")
-
-      val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
-      val nloops = if (args.length >= 4) args(3).toInt else 3
-      // GROUP BY FIELDS: will drive the grouping key's!
-      val posRegex = /* if (args.length >= 6) scala.io.Source.fromFile(args(5)).mkString("") else */ JsonPosRegex
-      val negRegex = /* if (args.length >= 7) scala.io.Source.fromFile(args(6)).mkString("") else */ JsonNegRegex
-      val groupByFields = params("grouping").replace(" ",",")
-      val minCount = params("mincount").toInt
-      // var conf = new SparkConf("/home/stephen/spark-1.4.2/conf/spark-defaults.conf").setAppName("Argus") // .setMaster(master)
-      //var conf = new SparkConf(true).setAppName("Argus") // .setMaster(master)
-
-      val cmdline = params("cmdline") + Seq("",groupByFields, minCount).mkString(" ")
-      import collection.mutable
-      val rparams = mutable.Map[String,String](params.toSeq:_*)
-      rparams.update("cmdline", cmdline)
-      rparams.update("jsonNeg", JsonNegRegex)
-      rparams.update("jsonPos", JsonPosRegex)
-//      val eparams = params.mapValues( pv => URLEncoder.encode(pv))
-//      val url = s"$RegexUrl?cmdline=$cmdline&mincount=$minCount&groupByFields=${eparams("grouping")}"
-      val url = RegexUrl
-      println(s"Url=$url params=${params.mkString(",")}")
-      val retMapJson = HttpUtils.post(url, Map(rparams.toSeq:_*))
-      val returnMode = rparams("mode")
-      if (returnMode != null && !returnMode.trim.isEmpty()) {
-        if (returnMode.equalsIgnoreCase("HTML")) {
-          displayPage("Keywords Query Results:",
-            // <p>Query: {jsonObject.get.toString}</p>
-            <p>Return:
-              {retMapJson.toList}
-            </p>
-              <pre>Route: /query</pre>
-          )
-        }
-        else {
-          response.setContentType("application/json")
-          response.setContentLength(retMapJson.toString().length())
-          response.writer.print(retMapJson.toString())
-        }
-      }
-      else {
-        response.setContentType("application/json")
-        response.setContentLength(retMapJson.toString().length())
-        response.writer.print(retMapJson.toString())
-      }
-    } catch {
-      case e: Exception =>
-        System.err.println("got exception")
-        e.printStackTrace
-    }
-
   }
 
   override def destroy() = {
