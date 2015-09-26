@@ -57,28 +57,9 @@ object RegexFilters {
     webServer = new DemoHttpServer().run(Map("port" -> DefaultPort, "ctx" -> DefaultCtx))
   }
 
-  //  def startNettyWebServer() = {
-  //    import unfiltered.request._
-  //    import unfiltered.response._
-  //    val hello = unfiltered.netty.cycle.Planify {
-  //       case _ => ResponseString("hello world")
-  //    }
-  //    unfiltered.netty.Server.http(8080).plan(hello).run()
-  //  }
-  //
-
   def submit(args: Array[String]) = {
     println(s"Submit entered with ${args.mkString(",")}")
     val DtName = "interaction_created_at"
-    // John you need to set this to an input HttpReqParam
-    val JsonPosRegex = """{"Party":"(?i-mx:(\\b(party|parties)\\b))",
-          "New Years Eve":"(?i-mx:(\\b(new)\\b))",
-          "Beer":"(?i-mx:(\\b(beer|drunk|drink)\\b))",
-          "Resolutions":"(?i-mx:(\\b(resolution|resolv)\\b))"}"""
-    // John you need to set this to an input HttpReqParam
-    val JsonNegRegex = """{"Party":"(?i-mx:(\\b(birthday)\\b))",
-          "Beer":"(?i-mx:(\\b(bud|budweiser)\\b))"}
-                       """
     val headers = List("interaction_created_at", "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone", "twitter_user_statuses_count", "twitter_user_friends_count", "state_province")
     val headersOrderMap = (0 until headers.length).zip(headers).toMap
     val headersNameMap = headers.zip(0 until headers.length).toMap
@@ -94,16 +75,13 @@ object RegexFilters {
     val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
     val nloops = if (args.length >= 4) args(3).toInt else 3
     val cacheEnabled = if (args.length >= 5) args(4).toBoolean else false
-//    val posRegex = if (args.length >= 6) scala.io.Source.fromFile(args(5)).mkString("") else JsonPosRegex
-    val posKeywords = args(5).split(" ")
-//    val negRegex = if (args.length >= 7) scala.io.Source.fromFile(args(6)).mkString("") else JsonNegRegex
-    val negKeywords = args(6).split(" ")
-    val groupByFields = if (args.length >= 8) args(7).split(",").toList else List()
-    val minCount = if (args.length >= 9) args(8).toInt else 2
+    val groupByFields = if (args.length >= 6) args(5).split(",").toList else List()
+    val minCount = if (args.length >= 7) args(6).toInt else 2
+    val posRegEx = args(7)
+    val negRegEx = args(8)
     var conf = new SparkConf().setAppName("Simple Application").setMaster(master)
     var sc = new SparkContext(conf)
     println(s"Connecting to master=${conf.get("spark.master")} reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
-    println(s"PosRegex=$posKeywords\nNegRegex=$negKeywords")
     var rddData = sc.textFile(dataFile, nparts)
     if (cacheEnabled) {
       rddData.cache()
@@ -115,9 +93,9 @@ object RegexFilters {
       val d = new Date
       println(s"** Loop #${nloop + 1} starting at $d **")
       val resultMap = MMap[String, Any]()
-      val posJson= posKeywords.map { k =>
-        s""""$k":"(?i-mx:(\\b($k)\\b))""""
-      }.mkString("{",",","}")
+      val posJson= posRegEx // posKeywords.split(" ").map { k =>
+//        s""""$k":"(?i-mx:(\\b($k)\\b))""""
+//      }.mkString("{",",","}")
       val jsonPos = JSON.parseFull(posJson)
       val posRegexMap = jsonPos.map { m =>
         val p = m.asInstanceOf[Map[String, Any]]
@@ -125,9 +103,9 @@ object RegexFilters {
           (k, v.asInstanceOf[String].r)
         }
       }
-      val negJson= negKeywords.map { k =>
-        s""""$k":"(?i-mx:(\\b($k)\\b))""""
-      }.mkString("{",",","}")
+      val negJson= negRegEx // negKeywords.split(" ").map { k =>
+//        s""""$k":"(?i-mx:(\\b($k)\\b))""""
+//      }.mkString("{",",","}")
       val jsonNeg = JSON.parseFull(negJson)
       val negRegexMap = jsonNeg.map { m =>
         m.asInstanceOf[Map[String, Any]].map { case (k, v) =>

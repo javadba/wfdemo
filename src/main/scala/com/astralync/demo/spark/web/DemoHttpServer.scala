@@ -22,6 +22,7 @@ import java.net.{URLDecoder, InetSocketAddress}
 
 import com.astralync.demo.spark.RegexFilters
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
+import collection.mutable
 
 class DemoHttpServer {
 
@@ -47,8 +48,8 @@ class RootHandler extends HttpHandler {
 
   def handle(t: HttpExchange) {
 //    val res = process(t.getRequestBody)
-    val rparams = t.getRequestURI.getQuery.split("&")
-    val params = if (rparams.nonEmpty) rparams
+    val rparams = t.getRequestURI.getQuery
+    val params = if (rparams!=null && rparams.nonEmpty) rparams.split("&")
           else HttpUtils.readStream(t.getRequestBody).split("&")
     val pmap = params.map(_.split("=")).map{ a => (a(0),a(1))}.toMap
     val res = process(pmap)
@@ -62,10 +63,10 @@ class RootHandler extends HttpHandler {
 //    System.err.println(s"Received [$cmd]")
   private def process(params: Map[String,String]) = {
     val eparams = params.mapValues(pv=> URLDecoder.decode(pv))
-    val cmdline = eparams("cmdline").split(" ")
-
-    System.err.println(s"Received ${cmdline}  [${eparams.mkString(",")}]")
-    val res = RegexFilters.submit(cmdline)
+    var cmdline = mutable.ArrayBuffer(eparams("cmdline").split(" "):_*)
+    cmdline ++= Array(eparams("jsonPos"),eparams("jsonNeg"))
+    System.err.println(s"Received cmdline=[${cmdline.mkString(" ")}]  eparams=[${eparams.mkString(",")}]")
+    val res = RegexFilters.submit(cmdline.toArray)
     System.err.println(s"Result: ${res.substring(0,math.min(MaxPrint, res.length))}")
     res
   }

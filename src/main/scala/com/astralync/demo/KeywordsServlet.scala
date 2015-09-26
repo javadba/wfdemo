@@ -24,8 +24,6 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
   var groupByFields = List[String]()
   val InteractionField = "interaction_created_at"
   val DtNames = s"$InteractionField twitter_user_lang"
-//  val DtNames = s"$InteractionField state_province"
-  //  val fakeArgs = "spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true".split(" ")
   val fakeArgs = "local[32] /shared/demo/data/dataSmall 3 3 true".split(" ")
 
   override def init(config: ServletConfig) = {
@@ -74,11 +72,11 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
         JSON
         <p/>
         Grouping Fields:
-        <input type="text" size="80" name="grouping" value={gval}/>
+        <input type="text" size="80" name="grouping" value={gval.replace(" ",",")}/>
         <p/>
         <p>All fields:
           <font size="-1">
-            {headers.mkString(" ,")}
+            {headers.mkString(",")}
           </font>
         </p>
         <p/>
@@ -139,12 +137,6 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val headersOrderMap = (0 until headers.length).zip(headers).toMap
       val headersNameMap = headers.zip(0 until headers.length).toMap
 
-      if (args.length == 0) {
-        System.err.println( """Usage: RegexFilters <master> <datadir> <#partitions> <#loops> <cacheEnabled true/false> <groupByFields separated by commas no spaces>
-        e.g. RegexFilters spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/argus/data500mb 56 3 true posregexFile.json negregexfile.json interaction_created_at,state_province""")
-        System.exit(0)
-      }
-      val homeDir = "/home/stephen"
       val dataFile = if (args.length >= 2) args(1)
           else throw new IllegalArgumentException("Missing datafile parameter")
 
@@ -153,19 +145,21 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       // GROUP BY FIELDS: will drive the grouping key's!
       val posRegex = /* if (args.length >= 6) scala.io.Source.fromFile(args(5)).mkString("") else */ JsonPosRegex
       val negRegex = /* if (args.length >= 7) scala.io.Source.fromFile(args(6)).mkString("") else */ JsonNegRegex
-      val groupByFields = params("grouping").split("\\s").toSeq
+      val groupByFields = params("grouping").replace(" ",",")
       val minCount = params("mincount").toInt
       // var conf = new SparkConf("/home/stephen/spark-1.4.2/conf/spark-defaults.conf").setAppName("Argus") // .setMaster(master)
       //var conf = new SparkConf(true).setAppName("Argus") // .setMaster(master)
 
-      val cmdline = URLEncoder.encode(params("cmdline") + Seq("",JsonPosRegex, JsonNegRegex, groupByFields, minCount).mkString(" "))
+      val cmdline = params("cmdline") + Seq("",groupByFields, minCount).mkString(" ")
       import collection.mutable
       val rparams = mutable.Map[String,String](params.toSeq:_*)
       rparams.update("cmdline", cmdline)
+      rparams.update("jsonNeg", JsonNegRegex)
+      rparams.update("jsonPos", JsonPosRegex)
 //      val eparams = params.mapValues( pv => URLEncoder.encode(pv))
 //      val url = s"$RegexUrl?cmdline=$cmdline&mincount=$minCount&groupByFields=${eparams("grouping")}"
       val url = RegexUrl
-      println(s"Url=$url")
+      println(s"Url=$url params=${params.mkString(",")}")
       val retMapJson = HttpUtils.post(url, Map(rparams.toSeq:_*))
       val returnMode = rparams("mode")
       if (returnMode != null && !returnMode.trim.isEmpty()) {
