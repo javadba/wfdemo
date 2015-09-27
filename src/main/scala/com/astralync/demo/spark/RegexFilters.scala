@@ -2,6 +2,7 @@ package com.astralync.demo.spark
 
 import java.util.Date
 
+import com.astralync.demo.TwitterLineParser
 import com.astralync.demo.spark.web.DemoHttpServer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
@@ -57,9 +58,6 @@ object RegexFilters {
   def submit(args: Array[String]) = {
     println(s"Submit entered with ${args.mkString(",")}")
     val DtName = "interaction_created_at"
-    val headers = List("interaction_created_at", "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone", "twitter_user_statuses_count", "twitter_user_friends_count", "state_province")
-    val headersOrderMap = (0 until headers.length).zip(headers).toMap
-    val headersNameMap = headers.zip(0 until headers.length).toMap
 
     if (args.length == 0) {
       System.err.println( """Usage: RegexFilters <master> <datadir> <#partitions> <#loops> <cacheEnabled true/false> <groupByFields separated by commas no spaces>
@@ -106,26 +104,11 @@ object RegexFilters {
         }
       }
 
-      val bc = sc.broadcast((posRegexMap, negRegexMap, headers, groupByFields, DtNames,
+      val bc = sc.broadcast((posRegexMap, negRegexMap, TwitterLineParser.headers, groupByFields, DtNames,
         InteractionField, minCount))
       val filtersRdd = rddData.mapPartitionsWithIndex({ case (rx, iter) =>
         val (locPosMap, locNegMap, locHeaders, locGroupingFields, locDtNames,
         locInteractionField, locMinCount) = bc.value
-        def parseLine(iline: String, headersList: List[String]):
-        Option[Map[String, String]] = {
-          val line = iline.trim
-          def formatDate(dt: String) = {
-            s"${dt.slice(0, 4)}-${dt.slice(8, 10)}-${dt.slice(5, 7)}"
-          }
-          if (line.length == 0 || line.count(c => c == ',') != locHeaders.size) {
-            None
-          } else {
-            val lmap = locHeaders.zip(line.split(",").map(_.replace("\"", ""))).toMap
-            val nmap = lmap.updated(locInteractionField,
-              formatDate(lmap(locInteractionField)))
-            Some(nmap)
-          }
-        }
         def genKey(k: String, groupingFields: Seq[String], lmap: Map[String, String]) = {
           if (groupingFields.isEmpty) {
             k
@@ -160,7 +143,7 @@ object RegexFilters {
                   }
                 }
                 if (allGood) {
-                  val lmap = parseLine(line, locHeaders)
+                  val lmap = TwitterLineParser.parse(line)
                   if (lmap.isDefined) {
                     val oval = genKey(k, locGroupingFields, lmap.get)
                     //                      println(s"accepting line $line")

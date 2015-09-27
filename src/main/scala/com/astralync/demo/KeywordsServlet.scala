@@ -28,11 +28,11 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
     super.init(config)
   }
 
-  val headers = List(InteractionField, "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone",  "twitter_user_statuses_count", "twitter_user_friends_count",  "state_province")
+  val headers = List(InteractionField, "interaction_content", "interaction_geo_latitude", "interaction_geo_longitude", "interaction_id", "interaction_author_username", "interaction_link", "klout_score", "interaction_author_link", "interaction_author_name", "interaction_source", "salience_content_sentiment", "datasift_stream_id", "twitter_retweeted_id", "twitter_user_created_at", "twitter_user_description", "twitter_user_followers_count", "twitter_user_geo_enabled", "twitter_user_lang", "twitter_user_location", "twitter_user_time_zone", "twitter_user_statuses_count", "twitter_user_friends_count", "state_province")
 
   private def displayPage(title: String, content: Seq[Node]) = Template.page(title, content, url(_))
 
-  val RegexUrl=s"http://${InetAddress.getLocalHost.getHostName}:8180/wfdemo"
+  val RegexUrl = s"http://${InetAddress.getLocalHost.getHostName}:8180/wfdemo"
   post("/query") {
 
     try {
@@ -63,23 +63,23 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val headersNameMap = headers.zip(0 until headers.length).toMap
 
       val dataFile = if (args.length >= 2) args(1)
-          else throw new IllegalArgumentException("Missing datafile parameter")
+      else throw new IllegalArgumentException("Missing datafile parameter")
 
       val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
       val nloops = if (args.length >= 4) args(3).toInt else 3
       val posRegex = JsonPosRegex
       val negRegex = JsonNegRegex
-      val groupByFields = params("grouping").replace(" ",",")
+      val groupByFields = params("grouping").replace(" ", ",")
       val minCount = params("mincount").toInt
-      val cmdline = params("cmdline") + Seq("",groupByFields, minCount).mkString(" ")
+      val cmdline = params("cmdline") + Seq("", groupByFields, minCount).mkString(" ")
       import collection.mutable
-      val rparams = mutable.Map[String,String](params.toSeq:_*)
+      val rparams = mutable.Map[String, String](params.toSeq: _*)
       rparams.update("cmdline", cmdline)
       rparams.update("jsonNeg", JsonNegRegex)
       rparams.update("jsonPos", JsonPosRegex)
       val url = RegexUrl
       println(s"Url=$url params=${params.mkString(",")}")
-      val retMapJson = HttpUtils.post(url, Map(rparams.toSeq:_*))
+      val retMapJson = HttpUtils.post(url, Map(rparams.toSeq: _*))
       val returnMode = rparams("mode")
       if (returnMode != null && !returnMode.trim.isEmpty()) {
         if (returnMode.equalsIgnoreCase("HTML")) {
@@ -127,39 +127,50 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
     val posKeywords = """iphone twitter love boyz"""
     val negKeywords = """don't hate parkside"""
     val gval = DtNames
+    val sortBy = headers.map(h => s"""<option value="$h>$h</option>""").mkString("\n")
     displayPage(title,
       <form action={url("/query")} method='POST'>
-        <table>
-        <tr><td>Included Keywords:</td><td>Excluded Keywords:</td></tr>
-        <tr><td> <textarea cols="50" rows="3" name="jsonPos">
-          {posKeywords}
-        </textarea></td>
-         <td> <textarea cols="100" rows="2" name="jsonNeg"> {negKeywords} </textarea></td>
+        <table border="0">
+          <tr>
+            <td colspan="2">Grouping Fields:
+              &nbsp; <input type="text" size="80" name="grouping" value={gval.replace(" ", ",")}/>
+            </td>
           </tr>
-          </table>
-        <p/>
-        Mode:
-        <input type="radio" name="mode" label="HTML" value="html"/>
-        HTML
-        <input type="radio" name="mode" label="JSON" value="json" checked="true"/>
-        JSON
-        <p/>
-        Grouping Fields:
-        <input type="text" size="80" name="grouping" value={gval.replace(" ",",")}/>
-        <p/>
-        <p>All fields:
-          <font size="-1">
-            {headers.mkString(",")}
-          </font>
-        </p>
-        <p/>
-        MinCount for Groups:&nbsp;
-          <input type="text" size="6" name="mincount" value="20"/>
-        <p/>
-        Backend/Spark options:
-        <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
-        <p/>
-        <input type='submit'/>
+          <tr>
+            <td colspan="2">Sort by:
+              &nbsp; <select name="sortby">
+              {sortBy}
+              ></select>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2">Filter:
+              &nbsp; <input type="text" size="80" name="filter" value="(beer or party) and fun"/>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2">All fields:
+              <font size="-1">
+                {headers.mkString(",")}
+              </font>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2">MinCount for Groups:
+              &nbsp; <input type="text" size="6" name="mincount" value="20"/>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2">Backend/Spark options:
+              <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2">
+              <input type='submit'/>
+            </td>
+          </tr>
+        </table>
       </form>
         <pre>Route: /queryForm</pre>
     )
