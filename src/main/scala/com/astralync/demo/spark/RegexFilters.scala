@@ -55,6 +55,16 @@ object RegexFilters {
     webServer = new DemoHttpServer().run(Map("port" -> DefaultPort, "ctx" -> DefaultCtx))
   }
 
+  var sc: SparkContext = _
+  def getSc(master: String) = {
+    if (sc==null) {
+      var conf = new SparkConf().setAppName("Simple Application").setMaster(master)
+      println(s"Connecting to master=${conf.get("spark.master")}")
+      sc = new SparkContext(conf)
+    }
+    sc
+  }
+
   def submit(args: Array[String]) = {
     println(s"Submit entered with ${args.mkString(",")}")
     val DtName = "interaction_created_at"
@@ -70,13 +80,15 @@ object RegexFilters {
     val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
     val nloops = if (args.length >= 4) args(3).toInt else 3
     val cacheEnabled = if (args.length >= 5) args(4).toBoolean else false
-    val groupByFields = if (args.length >= 6) args(5).split(",").toList else List()
+    val groupByFields =
+      if (args.length >= 6) args(5).split(",").toList else List()
     val minCount = if (args.length >= 7) args(6).toInt else 2
-    val posRegEx = args(7)
-    val negRegEx = args(8)
-    var conf = new SparkConf().setAppName("Simple Application").setMaster(master)
-    var sc = new SparkContext(conf)
-    println(s"Connecting to master=${conf.get("spark.master")} reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
+    val posKeywords = args(7).split(",").toList
+    val posAndOr = args(8)
+    val negKeywords = args(9).split(",").toList
+    val negAndOr = args(10)
+    println(s"Reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
+    sc = getSc(master)
     var rddData = sc.textFile(dataFile, nparts)
     if (cacheEnabled) {
       rddData.cache()
@@ -88,26 +100,11 @@ object RegexFilters {
       val d = new Date
       println(s"** Loop #${nloop + 1} starting at $d **")
       val resultMap = MMap[String, Any]()
-      val posJson= posRegEx
-      val jsonPos = JSON.parseFull(posJson)
-      val posRegexMap = jsonPos.map { m =>
-        val p = m.asInstanceOf[Map[String, Any]]
-        p.map { case (k, v) =>
-          (k, v.asInstanceOf[String].r)
-        }
-      }
-      val negJson= negRegEx
-      val jsonNeg = JSON.parseFull(negJson)
-      val negRegexMap = jsonNeg.map { m =>
-        m.asInstanceOf[Map[String, Any]].map { case (k, v) =>
-          (k, v.asInstanceOf[String].r)
-        }
-      }
 
-      val bc = sc.broadcast((posRegexMap, negRegexMap, TwitterLineParser.headers, groupByFields, DtNames,
-        InteractionField, minCount))
+      val bc = sc.broadcast(posKeywords, posAndOr, negKeywords, negAndOr, TwitterLineParser.headers, groupByFields, DtNames,
+        InteractionField, minCount)
       val filtersRdd = rddData.mapPartitionsWithIndex({ case (rx, iter) =>
-        val (locPosMap, locNegMap, locHeaders, locGroupingFields, locDtNames,
+        val (locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
         locInteractionField, locMinCount) = bc.value
         def genKey(k: String, groupingFields: Seq[String], lmap: Map[String, String]) = {
           if (groupingFields.isEmpty) {
@@ -127,45 +124,49 @@ object RegexFilters {
 
         var nlines = 0
         iter.map { line =>
-          nlines += 1
-          val posFiltered = for ((k, regex) <- locPosMap.get) yield {
-            val rout = regex.findFirstIn(line) match {
-              case Some(l) =>
-                val allGood = if (locNegMap.isEmpty) {
-                  true
-                } else {
-                  locNegMap.get.foldLeft(true) { case (stillgood, (k, negRegex)) =>
-                    val rout = negRegex.findFirstIn(l) match {
-                      case Some(nl) => false
-                      case _ => stillgood
-                    }
-                    rout
-                  }
-                }
-                if (allGood) {
-                  val lmap = TwitterLineParser.parse(line)
-                  if (lmap.isDefined) {
-                    val oval = genKey(k, locGroupingFields, lmap.get)
-                    //                      println(s"accepting line $line")
-                    Some((oval, 1))
-                  } else {
-                    None
-                  }
-                } else {
-                  None
-                }
-              case _ => None
+            nlines += 1
+          println(line)
+          assert(locPosKeywords.nonEmpty, "Must supply some positive keywords")
+          val outKeys = if (locPosAndOr.equalsIgnoreCase("OR")) {
+            locPosKeywords.filter(line.contains(_))
+          } else {
+            val allFound = locPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
+            if (allFound) {
+              List(locPosKeywords.mkString(":"))
+            } else {
+              List[String]()
             }
-            rout
+          }
+          val allGood = outKeys.nonEmpty && (locNegKeywords.isEmpty || {
+            if (locNegAndOr.equalsIgnoreCase("OR")) {
+              locNegKeywords.foldLeft(true) { case (b, k) => b && !line.contains(k) }
+            } else {
+              locNegKeywords.foldLeft(false) { case (b, k) => b || !line.contains(k) }
+            }
+          })
+          val allFiltered = if (allGood) {
+            val lmap = TwitterLineParser.parse(line)
+            if (lmap.isDefined) {
+              outKeys.map { k =>
+                val oval = genKey(k, locGroupingFields, lmap.get)
+                //                      println(s"accepting line $line")
+                (oval, 1)
+              }
+            } else {
+              List[(String, Int)]()
+            }
+          } else {
+            List[(String, Int)]()
           }
           if (nlines % 1000 == 1) {
             println(s"For partition=$rx  number of lines processed=$nlines")
           }
-          posFiltered.toList.flatten
+          allFiltered.toList
+//          flattened.flatten
         }
-      }, true)
-      val outRdd = filtersRdd.filter(l => l.length > 0 && !l.isEmpty)
-      val lrdd = outRdd.flatMap { x => x }.countByKey().filter { case (k, v) => v >= minCount }
+      }, true).flatMap(identity)
+      val outRdd = filtersRdd // .filter(l => l.length > 0 && !l.isEmpty)
+      val lrdd = outRdd /* .flatMap { x => x } */.countByKey().filter { case (k, v) => v >= minCount }
       countedRdd = Map(lrdd.toList: _*)
       val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
       durations += duration

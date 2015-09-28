@@ -38,26 +38,26 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
     try {
 
       val args = params("cmdline").split("\\s").map(_.trim)
-      val JsonPosRegex: String = if (params.contains("jsonPos")) {
-        params("jsonPos").split(" ").map(_.trim).filter(_.length > 0).map(k =>
+      val JsonPosRegex: String = if (params.contains("posKeywords")) {
+        params("posKeywords").split(" ").map(_.trim).filter(_.length > 0).map(k =>
           s""" "$k":"(?i)(.*$k.*)" """)
           .mkString("{", ",", "}")
       } else {
         throw new IllegalArgumentException("Missing the keyword parameter jsonPos")
       }
-      println(s"${JsonPosRegex}");
-      println(s"${JsonPosRegex.getClass.getSimpleName}");
+      println(s"${JsonPosRegex}")
+      println(s"${JsonPosRegex.getClass.getSimpleName}")
 
-      val JsonNegRegex: String = if (params.contains("jsonNeg")) {
-        params("jsonNeg").split(" ").map(_.trim).filter(_.length > 0).map(k =>
+      val JsonNegRegex: String = if (params.contains("negKeywords")) {
+        params("negKeywords").split(" ").map(_.trim).filter(_.length > 0).map(k =>
           s""" "$k":"(?i)(.*$k.*)" """)
           .mkString("{", ",", "}")
 
       } else {
         throw new IllegalArgumentException("Missing the keyword parameter jsonNeg")
       }
-      println(s"${JsonNegRegex}");
-      println(s"${JsonNegRegex.getClass.getSimpleName}");
+      println(s"${JsonNegRegex}")
+      println(s"${JsonNegRegex.getClass.getSimpleName}")
 
       val headersOrderMap = (0 until headers.length).zip(headers).toMap
       val headersNameMap = headers.zip(0 until headers.length).toMap
@@ -67,11 +67,15 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
 
       val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
       val nloops = if (args.length >= 4) args(3).toInt else 3
-      val posRegex = JsonPosRegex
-      val negRegex = JsonNegRegex
       val groupByFields = params("grouping").replace(" ", ",")
       val minCount = params("mincount").toInt
-      val cmdline = params("cmdline") + Seq("", groupByFields, minCount).mkString(" ")
+      val posRegex = JsonPosRegex
+      val negRegex = JsonNegRegex
+      val posKeyWords = params("posKeywords").trim.replace(" ",",")
+      val negKeyWords = params("negKeywords").trim.replace(" ",",")
+      val cmdline = params("cmdline") + Seq("", groupByFields, minCount,
+        posKeyWords,params("posKeywordsAndOr"),
+        negKeyWords,params("negKeywordsAndOr")).mkString(" ")
       import collection.mutable
       val rparams = mutable.Map[String, String](params.toSeq: _*)
       rparams.update("cmdline", cmdline)
@@ -80,7 +84,7 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val url = RegexUrl
       println(s"Url=$url params=${params.mkString(",")}")
       val retMapJson = HttpUtils.post(url, Map(rparams.toSeq: _*))
-      val returnMode = rparams("mode")
+      val returnMode = "HTML" // rparams("mode")
       if (returnMode != null && !returnMode.trim.isEmpty()) {
         if (returnMode.equalsIgnoreCase("HTML")) {
           displayPage("Keywords Query Results:",
@@ -128,31 +132,41 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
     val negKeywords = """don't hate parkside"""
     val gval = DtNames
     val sortBy = headers.map(h => s"""<option value="$h>$h</option>""").mkString("\n")
+    println(s"sortBy=$sortBy")
     displayPage(title,
       <form action={url("/query")} method='POST'>
         <table border="0">
+        <tr><td>Included Keywords:<p/>
+            <textarea cols="50" rows="3" name="posKeywords">
+          {posKeywords}
+          </textarea></td>
+            <td><p/><input type="radio" name="posKeywordsAndOr" value="and" checked="true">AND</input>
+              <p/><input type="radio" name="posKeywordsAndOr" value="or">OR</input>
+            </td>
+        </tr>
+         <tr><td>Excluded Keywords:<p/>
+         <textarea cols="100" rows="2" name="negKeywords"> {negKeywords} </textarea></td>
+           <td> <p/> <input type="radio" name="negKeywordsAndOr" value="and" checked="true">AND</input>
+              <p/><input type="radio" name="negKeywordsAndOr" value="or">OR</input>
+             </td>
+          </tr>
           <tr>
             <td colspan="2">Grouping Fields:
               &nbsp; <input type="text" size="80" name="grouping" value={gval.replace(" ", ",")}/>
             </td>
           </tr>
-          <tr>
-            <td colspan="2">Sort by:
-              &nbsp; <select name="sortby">
-              {sortBy}
-              ></select>
-            </td>
-          </tr>
-          <tr>
-            <td colspan="2">Filter:
-              &nbsp; <input type="text" size="80" name="filter" value="(beer or party) and fun"/>
-            </td>
-          </tr>
-          <tr>
+          <!-- <tr>
             <td colspan="2">All fields:
               <font size="-1">
                 {headers.mkString(",")}
               </font>
+            </td>
+          </tr>  -->
+          <tr>
+            <td colspan="2">Sort by:
+              &nbsp; <select name="sortBy">
+              {sortBy}
+              ></select>
             </td>
           </tr>
           <tr>
@@ -162,7 +176,7 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
           </tr>
           <tr>
             <td colspan="2">Backend/Spark options:
-              <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data500m 4 1 true"/>
+              <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/dataSmall 4 1 true"/>
             </td>
           </tr>
           <tr>
