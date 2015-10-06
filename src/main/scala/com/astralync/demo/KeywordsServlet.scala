@@ -73,16 +73,23 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val negRegex = JsonNegRegex
       val posKeyWords = params("posKeywords").trim.replace(" ",",")
       val negKeyWords = params("negKeywords").trim.replace(" ",",")
+      println(s"negKeyWords=[$negKeyWords]")
+      var negkeys = params("negKeywords")
+      if (negkeys.trim.length==0) {
+        negkeys = "IgnoreMe"
+      }
+      println(s"negkeys=$negkeys")
       val cmdline = params("cmdline") + Seq("", groupByFields, minCount,
         posKeyWords,params("posKeywordsAndOr"),
-        negKeyWords,params("negKeywordsAndOr")).mkString(" ")
+        negkeys,params("negKeywordsAndOr")).mkString(" ")
       import collection.mutable
       val rparams = mutable.Map[String, String](params.toSeq: _*)
       rparams.update("cmdline", cmdline)
       rparams.update("jsonNeg", JsonNegRegex)
       rparams.update("jsonPos", JsonPosRegex)
+      rparams.update("negKeywords", negkeys)
       val url = RegexUrl
-      println(s"Url=$url params=${params.mkString(",")}")
+      println(s"Url=$url rparams=${rparams.mkString(",")}")
       val retMapJson = HttpUtils.post(url, Map(rparams.toSeq: _*))
       val returnMode = "HTML" // rparams("mode")
       if (returnMode != null && !returnMode.trim.isEmpty()) {
@@ -107,8 +114,8 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       }
     } catch {
       case e: Exception =>
-        System.err.println("got exception")
-        e.printStackTrace
+        System.err.println(s"got exception ${e.getMessage}")
+        e.printStackTrace(System.err)
     }
 
   }
@@ -131,17 +138,17 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
     val posKeywords = """iphone twitter love boyz"""
     val negKeywords = """don't hate parkside"""
     val gval = DtNames
-    val sortBy = headers.map(h => s"""<option value="$h>$h</option>""").mkString("\n")
+    val sortBy = headers.map(h => s"""<option value="$h">$h</option>""").mkString("\n")
     println(s"sortBy=$sortBy")
     displayPage(title,
+        <table border="0"><tr><td width="60%"><table border="0">
       <form action={url("/query")} method='POST'>
-        <table border="0">
         <tr><td>Included Keywords:<p/>
             <textarea cols="50" rows="3" name="posKeywords">
           {posKeywords}
           </textarea></td>
-            <td><p/><input type="radio" name="posKeywordsAndOr" value="and" checked="true">AND</input>
-              <p/><input type="radio" name="posKeywordsAndOr" value="or">OR</input>
+            <td><p/><input type="radio" name="posKeywordsAndOr" value="and">AND</input>
+              <p/><input type="radio" name="posKeywordsAndOr" value="or" checked="true">OR</input>
             </td>
         </tr>
          <tr><td>Excluded Keywords:<p/>
@@ -155,23 +162,39 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
               &nbsp; <input type="text" size="80" name="grouping" value={gval.replace(" ", ",")}/>
             </td>
           </tr>
-          <!-- <tr>
-            <td colspan="2">All fields:
-              <font size="-1">
-                {headers.mkString(",")}
-              </font>
-            </td>
-          </tr>  -->
           <tr>
             <td colspan="2">Sort by:
               &nbsp; <select name="sortBy">
-              {sortBy}
-              ></select>
+                  <option value="interaction_created_at">interaction_created_at</option>
+                  <option value="interaction_content">interaction_content</option>
+                  <option value="interaction_geo_latitude">interaction_geo_latitude</option>
+                  <option value="interaction_geo_longitude">interaction_geo_longitude</option>
+                  <option value="interaction_id">interaction_id</option>
+                  <option value="interaction_author_username">interaction_author_username</option>
+                  <option value="interaction_link">interaction_link</option>
+                  <option value="klout_score">klout_score</option>
+                  <option value="interaction_author_link">interaction_author_link</option>
+                  <option value="interaction_author_name">interaction_author_name</option>
+                  <option value="interaction_source">interaction_source</option>
+                  <option value="salience_content_sentiment">salience_content_sentiment</option>
+                  <option value="datasift_stream_id">datasift_stream_id</option>
+                  <option value="twitter_retweeted_id">twitter_retweeted_id</option>
+                  <option value="twitter_user_created_at">twitter_user_created_at</option>
+                  <option value="twitter_user_description">twitter_user_description</option>
+                  <option value="twitter_user_followers_count">twitter_user_followers_count</option>
+                  <option value="twitter_user_geo_enabled">twitter_user_geo_enabled</option>
+                  <option value="twitter_user_lang">twitter_user_lang</option>
+                  <option value="twitter_user_location">twitter_user_location</option>
+                  <option value="twitter_user_time_zone">twitter_user_time_zone</option>
+                  <option value="twitter_user_statuses_count">twitter_user_statuses_count</option>
+                  <option value="twitter_user_friends_count">twitter_user_friends_count</option>
+                  <option value="state_province">state_province</option>
+            </select>
             </td>
           </tr>
           <tr>
             <td colspan="2">MinCount for Groups:
-              &nbsp; <input type="text" size="6" name="mincount" value="20"/>
+              &nbsp; <input type="text" size="6" name="mincount" value="1"/>
             </td>
           </tr>
           <tr>
@@ -184,8 +207,16 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
               <input type='submit'/>
             </td>
           </tr>
-        </table>
       </form>
+          <tr>
+            <td colspan="2">All fields:
+              <font size="-1">
+                {headers.mkString(", ")}
+              </font>
+            </td>
+          </tr>
+        </table></td>
+          <td width="40%"/></tr></table>
         <pre>Route: /queryForm</pre>
     )
   }

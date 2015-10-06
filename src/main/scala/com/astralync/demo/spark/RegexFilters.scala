@@ -66,122 +66,128 @@ object RegexFilters {
   }
 
   def submit(args: Array[String]) = {
-    println(s"Submit entered with ${args.mkString(",")}")
-    val DtName = "interaction_created_at"
+    try {
+      println(s"Submit entered with ${args.mkString(",")}")
+      val DtName = "interaction_created_at"
 
-    if (args.length == 0) {
-      System.err.println( """Usage: RegexFilters <master> <datadir> <#partitions> <#loops> <cacheEnabled true/false> <groupByFields separated by commas no spaces>
+      if (args.length == 0) {
+        System.err.println( """Usage: RegexFilters <master> <datadir> <#partitions> <#loops> <cacheEnabled true/false> <groupByFields separated by commas no spaces>
         e.g. RegexFilters spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true posregexFile.json negregexfile.json interaction_created_at,state_province""")
-      System.exit(1)
-    }
-    val homeDir = "/home/stephen"
-    val master = args(0)
-    val dataFile = if (args.length >= 2) args(1) else s"$homeDir/argus/CitiesBaselineCounts2015010520150112.csv"
-    val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
-    val nloops = if (args.length >= 4) args(3).toInt else 3
-    val cacheEnabled = if (args.length >= 5) args(4).toBoolean else false
-    val groupByFields =
-      if (args.length >= 6) args(5).split(",").toList else List()
-    val minCount = if (args.length >= 7) args(6).toInt else 2
-    val posKeywords = args(7).split(",").toList
-    val posAndOr = args(8)
-    val negKeywords = args(9).split(",").toList
-    val negAndOr = args(10)
-    println(s"Reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
-    sc = getSc(master)
-    var rddData = sc.textFile(dataFile, nparts)
-    if (cacheEnabled) {
-      rddData.cache()
-    }
+        System.exit(1)
+      }
+      val homeDir = "/home/stephen"
+      val master = args(0)
+      val dataFile = if (args.length >= 2) args(1) else s"$homeDir/argus/CitiesBaselineCounts2015010520150112.csv"
+      val nparts = if (args.length >= 3) args(2).toInt else 100 // assuming 56 workers - do slightly less than 2xworkers
+      val nloops = if (args.length >= 4) args(3).toInt else 3
+      val cacheEnabled = if (args.length >= 5) args(4).toBoolean else false
+      val groupByFields =
+        if (args.length >= 6) args(5).split(",").toList else List()
+      val minCount = if (args.length >= 7) args(6).toInt else 2
+      val posKeywords = args(7).split(",").toList
+      val posAndOr = args(8)
+      val negKeywords = args(9).split(",").toList
+      val negAndOr = args(10)
+      println(s"Reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
+      sc = getSc(master)
+      var rddData = sc.textFile(dataFile, nparts)
+      if (cacheEnabled) {
+        rddData.cache()
+      }
 
-    val durations = mutable.ArrayBuffer[Double]()
-    var countedRdd: Map[String, Long] = null
-    for (nloop <- (0 until nloops)) {
-      val d = new Date
-      println(s"** Loop #${nloop + 1} starting at $d **")
-      val resultMap = MMap[String, Any]()
+      val durations = mutable.ArrayBuffer[Double]()
+      var countedRdd: Map[String, Long] = null
+      for (nloop <- (0 until nloops)) {
+        val d = new Date
+        println(s"** Loop #${nloop + 1} starting at $d **")
+        val resultMap = MMap[String, Any]()
 
-      val bc = sc.broadcast(posKeywords, posAndOr, negKeywords, negAndOr, TwitterLineParser.headers, groupByFields, DtNames,
-        InteractionField, minCount)
-      val filtersRdd = rddData.mapPartitionsWithIndex({ case (rx, iter) =>
-        val (locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
-        locInteractionField, locMinCount) = bc.value
-        def genKey(k: String, groupingFields: Seq[String], lmap: Map[String, String]) = {
-          if (groupingFields.isEmpty) {
-            k
-          } else {
-            val groupKey = groupingFields.map { f =>
-              if (!lmap.contains(f)) {
-                System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
-                k
+        val bc = sc.broadcast(posKeywords, posAndOr, negKeywords, negAndOr, TwitterLineParser.headers, groupByFields, DtNames,
+          InteractionField, minCount)
+        val filtersRdd = rddData.mapPartitionsWithIndex({ case (rx, iter) =>
+          val (locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
+          locInteractionField, locMinCount) = bc.value
+          def genKey(k: String, groupingFields: Seq[String], lmap: Map[String, String]) = {
+            if (groupingFields.isEmpty) {
+              k
+            } else {
+              val groupKey = groupingFields.map { f =>
+                if (!lmap.contains(f)) {
+                  System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
+                  k
+                } else {
+                  lmap(f)
+                }
+              }
+              (k +: groupKey).mkString("-")
+            }
+          }
+
+          var nlines = 0
+          iter.map { line =>
+            nlines += 1
+            println(line)
+            assert(locPosKeywords.nonEmpty, "Must supply some positive keywords")
+            val outKeys = if (locPosAndOr.equalsIgnoreCase("OR")) {
+              locPosKeywords.filter(line.contains(_))
+            } else {
+              val allFound = locPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
+              if (allFound) {
+                List(locPosKeywords.mkString(":"))
               } else {
-                lmap(f)
+                List[String]()
               }
             }
-            (k +: groupKey).mkString("-")
-          }
-        }
-
-        var nlines = 0
-        iter.map { line =>
-            nlines += 1
-          println(line)
-          assert(locPosKeywords.nonEmpty, "Must supply some positive keywords")
-          val outKeys = if (locPosAndOr.equalsIgnoreCase("OR")) {
-            locPosKeywords.filter(line.contains(_))
-          } else {
-            val allFound = locPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
-            if (allFound) {
-              List(locPosKeywords.mkString(":"))
-            } else {
-              List[String]()
-            }
-          }
-          val allGood = outKeys.nonEmpty && (locNegKeywords.isEmpty || {
-            if (locNegAndOr.equalsIgnoreCase("OR")) {
-              locNegKeywords.foldLeft(true) { case (b, k) => b && !line.contains(k) }
-            } else {
-              locNegKeywords.foldLeft(false) { case (b, k) => b || !line.contains(k) }
-            }
-          })
-          val allFiltered = if (allGood) {
-            val lmap = TwitterLineParser.parse(line)
-            if (lmap.isDefined) {
-              outKeys.map { k =>
-                val oval = genKey(k, locGroupingFields, lmap.get)
-                //                      println(s"accepting line $line")
-                (oval, 1)
+            val allGood = outKeys.nonEmpty && (locNegKeywords.isEmpty || {
+              if (locNegAndOr.equalsIgnoreCase("OR")) {
+                locNegKeywords.foldLeft(true) { case (b, k) => b && !line.contains(k) }
+              } else {
+                locNegKeywords.foldLeft(false) { case (b, k) => b || !line.contains(k) }
+              }
+            })
+            val allFiltered = if (allGood) {
+              val lmap = TwitterLineParser.parse(line)
+              if (lmap.isDefined) {
+                val o = outKeys.map { k =>
+                  val oval = genKey(k, locGroupingFields, lmap.get)
+                  //                      println(s"accepting line $line")
+                  (oval, 1)
+                }
+                o
+              } else {
+                List[(String, Int)]()
               }
             } else {
               List[(String, Int)]()
             }
-          } else {
-            List[(String, Int)]()
+            if (nlines % 1000 == 1) {
+              println(s"For partition=$rx  number of lines processed=$nlines")
+            }
+            allFiltered.toList
+            //          flattened.flatten
           }
-          if (nlines % 1000 == 1) {
-            println(s"For partition=$rx  number of lines processed=$nlines")
-          }
-          allFiltered.toList
-//          flattened.flatten
+        }, true).flatMap(identity)
+        val outRdd = filtersRdd // .filter(l => l.length > 0 && !l.isEmpty)
+        val lrdd = outRdd.countByKey()
+            val filtered = lrdd.filter { case (k, v) => v >= minCount }
+        countedRdd = Map(filtered.toList: _*)
+        val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
+        durations += duration
+        println(s"** RESULT for loop ${nloop + 1}:  ${countedRdd.mkString(",")} duration=$duration secs *** ")
+        if (!cacheEnabled) {
+          rddData = null
         }
-      }, true).flatMap(identity)
-      val outRdd = filtersRdd // .filter(l => l.length > 0 && !l.isEmpty)
-      val lrdd = outRdd /* .flatMap { x => x } */.countByKey().filter { case (k, v) => v >= minCount }
-      countedRdd = Map(lrdd.toList: _*)
-      val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
-      durations += duration
-      println(s"** RESULT for loop ${nloop + 1}:  ${countedRdd.mkString(",")} duration=$duration secs *** ")
-      if (!cacheEnabled) {
-        rddData = null
       }
+      println(s"** Test Completed. Loop durations=${durations.mkString(",")} ** ")
+      val cseq = countedRdd.toSeq
+      var dseq = durations.zipWithIndex.map { case (d, x) =>
+        (s"Loop$x-Duration", d.toLong)
+      }.toSeq
+      val retMapJson = new JSONObject(Map[String, Long]((dseq ++ cseq): _*))
+      retMapJson.toString(JSONFormat.defaultFormatter)
+    } catch {
+      case e: Exception => println(s"Caught ${e.getMessage}"); e.printStackTrace; e.getMessage
     }
-    println(s"** Test Completed. Loop durations=${durations.mkString(",")} ** ")
-    val cseq = countedRdd.toSeq
-    var dseq = durations.zipWithIndex.map { case (d, x) =>
-      (s"Loop$x-Duration", d.toLong)
-    }.toSeq
-    val retMapJson = new JSONObject(Map[String, Long]((dseq++cseq):_*))
-    retMapJson.toString(JSONFormat.defaultFormatter)
   }
 
 }
