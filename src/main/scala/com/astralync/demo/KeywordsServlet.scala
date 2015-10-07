@@ -19,9 +19,8 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
   var sc: SparkContext = _
   var cacheEnabled = true
   var nLoops = 1
-  var groupByFields = List[String]()
   val InteractionField = "interaction_created_at"
-  val DtNames = s"$InteractionField twitter_user_lang"
+  val DtNames = s"twitter_user_location twitter_user_lang $InteractionField"
   val fakeArgs = "local[32] /shared/demo/data/dataSmall 3 3 true".split(" ")
 
   override def init(config: ServletConfig) = {
@@ -74,7 +73,7 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val posKeyWords = params("posKeywords").trim.replace(" ",",")
       val negKeyWords = params("negKeywords").trim.replace(" ",",")
       println(s"negKeyWords=[$negKeyWords]")
-      var negkeys = params("negKeywords")
+      var negkeys = negKeyWords
       if (negkeys.trim.length==0) {
         negkeys = "IgnoreMe"
       }
@@ -91,13 +90,13 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
       val url = RegexUrl
       println(s"Url=$url rparams=${rparams.mkString(",")}")
       val retMapJson = HttpUtils.post(url, Map(rparams.toSeq: _*))
+      println(s"retMapJson=$retMapJson")
+
       val returnMode = "HTML" // rparams("mode")
       if (returnMode != null && !returnMode.trim.isEmpty()) {
         if (returnMode.equalsIgnoreCase("HTML")) {
           displayPage("Keywords Query Results:",
-            <p>Return:
-              {retMapJson.toList}
-            </p>
+            <pre>{retMapJson}</pre>
               <pre>Route: /query</pre>
           )
         }
@@ -135,24 +134,22 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
   }
 
   get("/queryForm") {
-    val posKeywords = """iphone twitter love boyz"""
-    val negKeywords = """don't hate parkside"""
+    val posKeywords = """wells fargo chase bank money cash"""
+    val negKeywords = """dallas arlington"""
     val gval = DtNames
     val sortBy = headers.map(h => s"""<option value="$h">$h</option>""").mkString("\n")
-    println(s"sortBy=$sortBy")
+//    println(s"sortBy=$sortBy")
     displayPage(title,
         <table border="0"><tr><td width="60%"><table border="0">
       <form action={url("/query")} method='POST'>
         <tr><td>Included Keywords:<p/>
-            <textarea cols="50" rows="3" name="posKeywords">
-          {posKeywords}
-          </textarea></td>
+            <textarea cols="50" rows="3" name="posKeywords">{posKeywords}</textarea></td>
             <td><p/><input type="radio" name="posKeywordsAndOr" value="and">AND</input>
               <p/><input type="radio" name="posKeywordsAndOr" value="or" checked="true">OR</input>
             </td>
         </tr>
          <tr><td>Excluded Keywords:<p/>
-         <textarea cols="100" rows="2" name="negKeywords"> {negKeywords} </textarea></td>
+         <textarea cols="100" rows="2" name="negKeywords">{negKeywords}</textarea></td>
            <td> <p/> <input type="radio" name="negKeywordsAndOr" value="and" checked="true">AND</input>
               <p/><input type="radio" name="negKeywordsAndOr" value="or">OR</input>
              </td>
@@ -165,26 +162,16 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
           <tr>
             <td colspan="2">Sort by:
               &nbsp; <select name="sortBy">
+                  <option value="twitter_user_location" checked="true">twitter_user_location</option>
                   <option value="interaction_created_at">interaction_created_at</option>
                   <option value="interaction_content">interaction_content</option>
-                  <option value="interaction_geo_latitude">interaction_geo_latitude</option>
-                  <option value="interaction_geo_longitude">interaction_geo_longitude</option>
-                  <option value="interaction_id">interaction_id</option>
-                  <option value="interaction_author_username">interaction_author_username</option>
-                  <option value="interaction_link">interaction_link</option>
                   <option value="klout_score">klout_score</option>
-                  <option value="interaction_author_link">interaction_author_link</option>
                   <option value="interaction_author_name">interaction_author_name</option>
                   <option value="interaction_source">interaction_source</option>
-                  <option value="salience_content_sentiment">salience_content_sentiment</option>
-                  <option value="datasift_stream_id">datasift_stream_id</option>
-                  <option value="twitter_retweeted_id">twitter_retweeted_id</option>
                   <option value="twitter_user_created_at">twitter_user_created_at</option>
                   <option value="twitter_user_description">twitter_user_description</option>
                   <option value="twitter_user_followers_count">twitter_user_followers_count</option>
-                  <option value="twitter_user_geo_enabled">twitter_user_geo_enabled</option>
                   <option value="twitter_user_lang">twitter_user_lang</option>
-                  <option value="twitter_user_location">twitter_user_location</option>
                   <option value="twitter_user_time_zone">twitter_user_time_zone</option>
                   <option value="twitter_user_statuses_count">twitter_user_statuses_count</option>
                   <option value="twitter_user_friends_count">twitter_user_friends_count</option>
@@ -199,7 +186,7 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
           </tr>
           <tr>
             <td colspan="2">Backend/Spark options:
-              <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/dataSmall 4 1 true"/>
+              <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data10m 56 1 true"/>
             </td>
           </tr>
           <tr>
@@ -208,13 +195,13 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
             </td>
           </tr>
       </form>
-          <tr>
+         <!-- <tr>
             <td colspan="2">All fields:
               <font size="-1">
                 {headers.mkString(", ")}
               </font>
             </td>
-          </tr>
+          </tr> -->
         </table></td>
           <td width="40%"/></tr></table>
         <pre>Route: /queryForm</pre>
@@ -244,7 +231,7 @@ object Matcher {
 
 object Template {
 
-  def page(title: String, content: Seq[Node], url: String => String = identity _, head: Seq[Node] = Nil, scripts: Seq[String] = Seq.empty, defaultScripts: Seq[String] = Seq("/assets/js/jquery.min.js", "/assets/js/bootstrap.min.js")) = {
+  def page(title: String, content: Seq[Node], url: String => String = identity _, head: Seq[Node] = Nil, scripts: Seq[String] = Seq.empty, defaultScripts: Seq[String] = Seq("js/jquery.min.js", "js/bootstrap.min.js")) = {
     <html lang="en">
       <head>
         <title>
@@ -256,10 +243,7 @@ object Template {
         <meta name="author" content=" "/>
 
         <!-- Styles -->
-        <link href="/assets/css/bootstrap.css" rel="stylesheet"/>
-        <link href="/assets/css/bootstrap-responsive.css" rel="stylesheet"/>
-        <link href="/assets/css/syntax.css" rel="stylesheet"/>
-        <link href="/assets/css/scalatra.css" rel="stylesheet"/>{head}
+        <link href="css/normalize.css" rel="stylesheet"/>
       </head>
 
       <body>

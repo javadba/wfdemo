@@ -67,7 +67,7 @@ object RegexFilters {
 
   def submit(args: Array[String]) = {
     try {
-      println(s"Submit entered with ${args.mkString(",")}")
+      println(s"Submit entered with ${args.mkString("~")}")
       val DtName = "interaction_created_at"
 
       if (args.length == 0) {
@@ -88,6 +88,8 @@ object RegexFilters {
       val posAndOr = args(8)
       val negKeywords = args(9).split(",").toList
       val negAndOr = args(10)
+      val sortBy=args(11)
+
       println(s"Reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
       sc = getSc(master)
       var rddData = sc.textFile(dataFile, nparts)
@@ -111,7 +113,14 @@ object RegexFilters {
             if (groupingFields.isEmpty) {
               k
             } else {
-              val groupKey = groupingFields.map { f =>
+              val sortedFields = if (!groupingFields.contains(sortBy)) {
+                System.err.println(s"Must select sortBy field contained in Grouping fields: sortBy=$sortBy")
+                groupingFields
+              } else {
+                List(sortBy) ++ groupingFields diff List(sortBy)
+              }
+
+              val groupKey = sortedFields.map { f =>
                 if (!lmap.contains(f)) {
                   System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
                   k
@@ -119,30 +128,33 @@ object RegexFilters {
                   lmap(f)
                 }
               }
-              (k +: groupKey).mkString("-")
+              (k +: groupKey).mkString(" ")
             }
           }
 
+          assert(locPosKeywords.nonEmpty, "Must supply some positive keywords")
           var nlines = 0
-          iter.map { line =>
+          val lowerPosKeywords = locPosKeywords.map(_.toLowerCase)
+          val lowerNegKeywords = locNegKeywords.map(_.toLowerCase)
+          iter.map { inline =>
+            val line = inline.toLowerCase
             nlines += 1
-            println(line)
-            assert(locPosKeywords.nonEmpty, "Must supply some positive keywords")
+//            println(line)
             val outKeys = if (locPosAndOr.equalsIgnoreCase("OR")) {
-              locPosKeywords.filter(line.contains(_))
+              lowerPosKeywords.filter(line.contains(_))
             } else {
-              val allFound = locPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
+              val allFound = lowerPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
               if (allFound) {
-                List(locPosKeywords.mkString(":"))
+                List(lowerPosKeywords.mkString(":"))
               } else {
                 List[String]()
               }
             }
-            val allGood = outKeys.nonEmpty && (locNegKeywords.isEmpty || {
+            val allGood = outKeys.nonEmpty && (lowerNegKeywords.isEmpty || {
               if (locNegAndOr.equalsIgnoreCase("OR")) {
-                locNegKeywords.foldLeft(true) { case (b, k) => b && !line.contains(k) }
+                lowerNegKeywords.foldLeft(true) { case (b, k) => b && !line.contains(k) }
               } else {
-                locNegKeywords.foldLeft(false) { case (b, k) => b || !line.contains(k) }
+                lowerNegKeywords.foldLeft(false) { case (b, k) => b || !line.contains(k) }
               }
             })
             val allFiltered = if (allGood) {
@@ -183,8 +195,20 @@ object RegexFilters {
       var dseq = durations.zipWithIndex.map { case (d, x) =>
         (s"Loop$x-Duration", d.toLong)
       }.toSeq
-      val retMapJson = new JSONObject(Map[String, Long]((dseq ++ cseq): _*))
-      retMapJson.toString(JSONFormat.defaultFormatter)
+      val combo = /* dseq ++ */ cseq
+      val outcombo = combo.sortWith { case ((astr, acnt), (bstr, bcnt)) =>
+        if (acnt != bcnt) {
+          acnt - bcnt >=0
+        } else {
+          bstr.substring(bstr.indexOf(" ") + 1).compareTo(astr.substring(astr.indexOf(" ") + 1)) >= 0
+        }
+      }
+      val formatted = outcombo.map{ case (s,cnt)  => s"($cnt) $s"}.mkString("\n")
+      val withDuration=formatted+s"\n\nDurations: ${dseq.mkString("\n")}"
+//      val retMapJson = new JSONObject(Map[String, Long](outcombo:_*))
+//      val ret = retMapJson.toString(JSONFormat.defaultFormatter)
+//      ret
+      withDuration
     } catch {
       case e: Exception => println(s"Caught ${e.getMessage}"); e.printStackTrace; e.getMessage
     }

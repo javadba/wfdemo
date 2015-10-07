@@ -19,6 +19,7 @@ package com.astralync.demo.spark.web
 
 import java.io.InputStream
 import java.net.{URLDecoder, InetSocketAddress}
+import java.text.Normalizer
 
 import com.astralync.demo.spark.RegexFilters
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
@@ -63,8 +64,8 @@ class RootHandler extends HttpHandler {
 //    System.err.println(s"Received [$cmd]")
   private def process(params: Map[String,String]) = {
     val eparams = params.mapValues(pv=> URLDecoder.decode(pv))
-    var cmdline = mutable.ArrayBuffer(eparams("cmdline").split(" "):_*)
-    cmdline ++= Array(eparams("jsonPos"),eparams("jsonNeg"))
+    var cmdline = mutable.ArrayBuffer(eparams("cmdline").split(" "):_*).map(_.trim).filter(_.length > 0)
+    cmdline ++= Array(eparams("jsonPos"),eparams("jsonNeg"),eparams("sortBy"))
     System.err.println(s"Received cmdline=[${cmdline.mkString(" ")}]  eparams=[${eparams.mkString(",")}]")
     val res = RegexFilters.submit(cmdline.toArray)
     System.err.println(s"Result: ${res.substring(0,math.min(MaxPrint, res.length))}")
@@ -74,7 +75,11 @@ class RootHandler extends HttpHandler {
   private def sendResponse(t: HttpExchange, resp: String) {
     t.sendResponseHeaders(200, resp.length())
     val os = t.getResponseBody
-    os.write(resp.getBytes)
+//    val outb = resp.getBytes("UTF-8")
+    val nout = Normalizer.normalize(resp, Normalizer.Form.NFD);
+    val repout = nout.replaceAll("[^\\x00-\\x7F]", "")
+    val repoutb = repout.getBytes
+    os.write(repoutb)
     os.close()
   }
 

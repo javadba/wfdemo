@@ -11,7 +11,6 @@ object KeywordsservletBuild extends Build {
   val Version = "0.1.0-SNAPSHOT"
   val ScalaVersion = "2.11.7"
   val ScalatraVersion = "2.4.0-RC2-2"
-
   lazy val project = Project (
     "keywordsservlet",
     file("."),
