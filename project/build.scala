@@ -27,7 +27,7 @@ object KeywordsservletBuild extends Build {
         "org.scalatra" %% "scalatra-scalate" % ScalatraVersion,
         "org.scalatra" %% "scalatra-specs2" % ScalatraVersion % "test",
         "ch.qos.logback" % "logback-classic" % "1.1.2" % "runtime",
-        "org.eclipse.jetty" % "jetty-webapp" % "9.2.13.v20150730" % "container",
+        "org.eclipse.jetty" % "jetty-webapp" % "9.2.10.v20150310" % "container",
         "javax.servlet" % "javax.servlet-api" % "3.1.0" % "provided",
         "net.databinder" % "unfiltered-netty_2.11" % "0.8.4"
       ),
