@@ -56,8 +56,9 @@ object RegexFilters {
   }
 
   var sc: SparkContext = _
+
   def getSc(master: String) = {
-    if (sc==null) {
+    if (sc == null) {
       var conf = new SparkConf().setAppName("Simple Application").setMaster(master)
       println(s"Connecting to master=${conf.get("spark.master")}")
       sc = new SparkContext(conf)
@@ -88,7 +89,8 @@ object RegexFilters {
       val posAndOr = args(8)
       val negKeywords = args(9).split(",").toList
       val negAndOr = args(10)
-      val sortBy=args(11)
+      val sortBy = args(11)
+//      val url = args(12)
 
       println(s"Reading dir=$dataFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
       sc = getSc(master)
@@ -97,7 +99,8 @@ object RegexFilters {
         rddData.cache()
       }
 
-      val durations = mutable.ArrayBuffer[Double]()
+      case class LoopOutput(nrecs: Int, duration: Double)
+      val loopOut = mutable.ArrayBuffer[LoopOutput]()
       var countedRdd: Map[String, Long] = null
       for (nloop <- (0 until nloops)) {
         val d = new Date
@@ -106,6 +109,7 @@ object RegexFilters {
 
         val bc = sc.broadcast(posKeywords, posAndOr, negKeywords, negAndOr, TwitterLineParser.headers, groupByFields, DtNames,
           InteractionField, minCount)
+        val accum = sc.accumulator(0)
         val filtersRdd = rddData.mapPartitionsWithIndex({ case (rx, iter) =>
           val (locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
           locInteractionField, locMinCount) = bc.value
@@ -136,10 +140,10 @@ object RegexFilters {
           var nlines = 0
           val lowerPosKeywords = locPosKeywords.map(_.toLowerCase)
           val lowerNegKeywords = locNegKeywords.map(_.toLowerCase)
-          iter.map { inline =>
+          val iterout = iter.map { inline =>
             val line = inline.toLowerCase
             nlines += 1
-//            println(line)
+            //            println(line)
             val outKeys = if (locPosAndOr.equalsIgnoreCase("OR")) {
               lowerPosKeywords.filter(line.contains(_))
             } else {
@@ -175,39 +179,41 @@ object RegexFilters {
             if (nlines % 1000 == 1) {
               println(s"For partition=$rx  number of lines processed=$nlines")
             }
+            if (!iter.hasNext) {
+              accum += nlines
+            }
             allFiltered.toList
             //          flattened.flatten
           }
+          iterout
         }, true).flatMap(identity)
         val outRdd = filtersRdd // .filter(l => l.length > 0 && !l.isEmpty)
         val lrdd = outRdd.countByKey()
-            val filtered = lrdd.filter { case (k, v) => v >= minCount }
+        val totalLines = accum.value
+        val filtered = lrdd.filter { case (k, v) => v >= minCount }
         countedRdd = Map(filtered.toList: _*)
         val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
-        durations += duration
-        println(s"** RESULT for loop ${nloop + 1}:  ${countedRdd.mkString(",")} duration=$duration secs *** ")
+        loopOut += LoopOutput(totalLines, duration)
+        println(s"** RESULT for loop ${nloop + 1}: #recs=$totalLines ${countedRdd.mkString(",")} duration=$duration secs *** ")
         if (!cacheEnabled) {
           rddData = null
         }
       }
-      println(s"** Test Completed. Loop durations=${durations.mkString(",")} ** ")
+      println(s"** Test Completed. Loop durations=${loopOut.map(_.toString).mkString(",")} ** ")
       val cseq = countedRdd.toSeq
-      var dseq = durations.zipWithIndex.map { case (d, x) =>
-        (s"Loop$x-Duration", d.toLong)
-      }.toSeq
       val combo = /* dseq ++ */ cseq
       val outcombo = combo.sortWith { case ((astr, acnt), (bstr, bcnt)) =>
         if (acnt != bcnt) {
-          acnt - bcnt >=0
+          acnt - bcnt >= 0
         } else {
           bstr.substring(bstr.indexOf(" ") + 1).compareTo(astr.substring(astr.indexOf(" ") + 1)) >= 0
         }
       }
-      val formatted = outcombo.map{ case (s,cnt)  => s"($cnt) $s"}.mkString("\n")
-      val withDuration=formatted+s"\n\nDurations: ${dseq.mkString("\n")}"
-//      val retMapJson = new JSONObject(Map[String, Long](outcombo:_*))
-//      val ret = retMapJson.toString(JSONFormat.defaultFormatter)
-//      ret
+      val formatted = outcombo.map { case (s, cnt) => s"($cnt) $s" }.mkString("\n")
+      val withDuration = s"Test run time (seconds): ${loopOut.map(_.duration).mkString("\n")}\n\nNumber of records searched: ${loopOut.map(_.nrecs).sum}\n\n*** Results ***\n${formatted}"
+      //      val retMapJson = new JSONObject(Map[String, Long](outcombo:_*))
+      //      val ret = retMapJson.toString(JSONFormat.defaultFormatter)
+      //      ret
       withDuration
     } catch {
       case e: Exception => println(s"Caught ${e.getMessage}"); e.printStackTrace; e.getMessage

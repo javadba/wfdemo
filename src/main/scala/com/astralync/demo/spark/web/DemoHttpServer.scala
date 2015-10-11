@@ -53,7 +53,7 @@ class RootHandler extends HttpHandler {
     val params = if (rparams!=null && rparams.nonEmpty) rparams.split("&")
           else HttpUtils.readStream(t.getRequestBody).split("&")
     val pmap = params.map(_.split("=")).map{ a => (a(0),a(1))}.toMap
-    val res = process(pmap)
+    val res = process(t, pmap)
     sendResponse(t, res)
   }
 
@@ -62,7 +62,7 @@ class RootHandler extends HttpHandler {
 //    val strm =  scala.io.Source.fromInputStream(body)
 //    val cmd = strm.mkString
 //    System.err.println(s"Received [$cmd]")
-  private def process(params: Map[String,String]) = {
+  private def process(t: HttpExchange, params: Map[String,String]) = {
     val eparams = params.mapValues(pv=> URLDecoder.decode(pv))
     var cmdline = mutable.ArrayBuffer(eparams("cmdline").split(" "):_*).map(_.trim).filter(_.length > 0)
     cmdline ++= Array(eparams("jsonPos"),eparams("jsonNeg"),eparams("sortBy"))
