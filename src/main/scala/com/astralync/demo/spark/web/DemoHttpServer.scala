@@ -65,7 +65,14 @@ class RootHandler extends HttpHandler {
   private def process(t: HttpExchange, params: Map[String,String]) = {
     val eparams = params.mapValues(pv=> URLDecoder.decode(pv))
     var cmdline = mutable.ArrayBuffer(eparams("cmdline").split(" "):_*).map(_.trim).filter(_.length > 0)
-    cmdline ++= Array(eparams("jsonPos"),eparams("jsonNeg"),eparams("sortBy"))
+    val query = t.getRequestURI.getRawQuery
+//    val query = t.getRequestURI.getRawQuery
+    cmdline ++= Array(eparams("sortBy"),
+       eparams("saveFile"), eparams("exportFile"), /* eparams("jsonPos"),eparams("jsonNeg"), */
+      s"${t.getRequestURI.toString}",
+      if (eparams.contains("searchTerms")) { eparams("searchTerms") }
+        else {"NONE"}
+    )
     System.err.println(s"Received cmdline=[${cmdline.mkString(" ")}]  eparams=[${eparams.mkString(",")}]")
     val res = RegexFilters.submit(cmdline.toArray)
     System.err.println(s"Result: ${res.substring(0,math.min(MaxPrint, res.length))}")

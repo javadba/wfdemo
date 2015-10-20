@@ -18,5 +18,6 @@
       <url-pattern>css/*</url-pattern>
       <url-pattern>js/*</url-pattern>
       <url-pattern>assets/*</url-pattern>
+      <url-pattern>results/*</url-pattern>
     </servlet-mapping>
 </web-app>

@@ -204,6 +204,14 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
             </td>
           </tr>
           <tr>
+            <td>Save file:
+              <input type="text" size="30" name="saveFile" value="results/query"/>
+            </td>
+            <td>Export file:
+              <input type="text" size="30" name="exportFile" value="src/main/webapp/results/queryResults.csv"/>
+            </td>
+          </tr>
+          <tr>
             <td colspan="2">Backend/Spark options:
               <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data10m 56 1 true"/>
             </td>
