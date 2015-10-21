@@ -17,13 +17,13 @@ package com.astralync.demo.spark.web
  * limitations under the License.
  */
 
-import java.io.InputStream
-import java.net.{URLDecoder, InetSocketAddress}
+import java.net.{InetSocketAddress, URLDecoder}
 import java.text.Normalizer
 
 import com.astralync.demo.spark.RegexFilters
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
-import collection.mutable
+
+import scala.collection.mutable
 
 class DemoHttpServer {
 
@@ -31,7 +31,7 @@ class DemoHttpServer {
     new Thread() {
       override def run() {
         val port = map.getOrElse("port", "8180").asInstanceOf[Int]
-        val ctx = map.getOrElse("ctx", "/wfdemo").asInstanceOf[String]
+        val ctx = map.getOrElse("ctx", "/").asInstanceOf[String]
         val server = HttpServer.create(new InetSocketAddress(port), 0)
         server.createContext(ctx, new RootHandler())
         server.setExecutor(null)
@@ -57,7 +57,7 @@ class RootHandler extends HttpHandler {
     sendResponse(t, res)
   }
 
-  val MaxPrint = 256*1024
+  val MaxPrint = 1*1024
 //  private def process(body: InputStream) = {
 //    val strm =  scala.io.Source.fromInputStream(body)
 //    val cmd = strm.mkString
@@ -75,7 +75,7 @@ class RootHandler extends HttpHandler {
     )
     System.err.println(s"Received cmdline=[${cmdline.mkString(" ")}]  eparams=[${eparams.mkString(",")}]")
     val res = RegexFilters.submit(cmdline.toArray)
-    System.err.println(s"Result: ${res.substring(0,math.min(MaxPrint, res.length))}")
+    System.err.println(s"Result (first 1K chars): ${res.substring(0,math.min(MaxPrint, res.length))}")
     res
   }
 

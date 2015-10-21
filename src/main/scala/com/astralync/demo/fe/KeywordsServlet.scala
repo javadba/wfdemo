@@ -50,8 +50,8 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
 
   private def displayPage(title: String, content: Seq[Node]) = Template.page(title, content, url(_))
 
-  val RegexUrl = s"http://${InetAddress.getLocalHost.getHostName}:8180/wfdemo"
-  post("/query") {
+  val RegexUrl = s"http://${InetAddress.getLocalHost.getHostName}:8180/"
+  post("/runQuery") {
 
     try {
 
@@ -140,19 +140,27 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
 
   val title = "Astralync: Twitter Keywords Search"
   get("/") {
-    <html>
-      <body>
-        <h1>$
-          {title}
-        </h1>
-        Say
-        <a href="queryForm">Query Form</a>
-        .
-      </body>
-    </html>
+    serveStaticResource()
   }
 
-  get("/queryForm") {
+//  get ("/home") {
+//    <html>
+//      <body>
+//        <h1>$
+//          {title}
+//        </h1>
+//        Say
+//        <a href="queryForm">Query Form</a>
+//        .
+//      </body>
+//    </html>
+//  }
+
+//  get("/home") {
+//    get("/query")
+//  }
+
+  get("/query") {
     val posKeywords = """wells fargo chase bank money cash"""
     val negKeywords = """dallas arlington"""
     val gval = DtNames
@@ -160,7 +168,7 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
 //    println(s"sortBy=$sortBy")
     displayPage(title,
         <table border="0"><tr><td width="60%"><table border="0">
-      <form action={url("/query")} method='POST'>
+      <form action={url("/runQuery")} method='POST'>
         <tr><td>Included Keywords:<p/>
             <textarea cols="50" rows="3" name="posKeywords">{posKeywords}</textarea></td>
             <td><p/><input type="radio" name="posKeywordsAndOr" value="and">AND</input>
@@ -204,16 +212,18 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
             </td>
           </tr>
           <tr>
-            <td>Save file:
+            <td width="40%">Save file:
               <input type="text" size="30" name="saveFile" value="results/query"/>
             </td>
-            <td>Export file:
-              <input type="text" size="30" name="exportFile" value="src/main/webapp/results/queryResults.csv"/>
+            <td width="60%">Export file:
+              <input type="text" size="70" name="exportFile" value="/home/stephen/wfdemo/src/main/webapp/results/queryResults.csv"/>
+              <!-- <input type="text" size="30" name="exportFile" value="src/main/webapp/results/queryResults.csv"/> -->
             </td>
           </tr>
           <tr>
             <td colspan="2">Backend/Spark options:
-              <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data10m 56 1 true"/>
+              <input type="text" size="80" name="cmdline" value="spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data5gb 56 1 true"/>
+              <!-- <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data10m 8 1 true"/> -->
             </td>
           </tr>
           <tr>
@@ -231,12 +241,8 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
           </tr> -->
         </table></td>
           <td width="40%"/></tr></table>
-        <pre>Route: /queryForm</pre>
+        <pre>Route: /query</pre>
     )
-  }
-
-  get("/demo") {
-    contentType = "text/html"
   }
 
   override def destroy() = {
@@ -305,7 +311,7 @@ object Template {
               <div class="span3">
                 <ul class="nav nav-list">
                   <li>
-                    <a href={url("/queryForm")}>Perform query</a>
+                    <a href={url("/query")}>Perform query</a>
                   </li>
                 </ul>
               </div>

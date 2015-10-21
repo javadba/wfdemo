@@ -20,7 +20,7 @@ import scala.util.parsing.json._
 object RegexFilters {
 
   val DefaultPort = 8180
-  val DefaultCtx = "/wfdemo"
+  val DefaultCtx = "/"
   var rddData: RDD[String] = _
   var cacheEnabled = true
   var nLoops = 1
@@ -226,10 +226,15 @@ object RegexFilters {
         }
       }
       @inline def makeUrl(str: String) = {
-        s"""<a href="$url&search_terms=${str.replace(" ",",")}">Details</a>"""
+        s"""</pre><a href="$url&search_terms=${str.replace(" ",",")}">Details</a><pre>"""
       }
-      val formatted = outcombo.map { case (str, cnt) => s"($cnt) $str ${makeUrl(str)}}" }.mkString("\n")
-      val withDuration = s"""Test run time (seconds): ${loopOut.map(_.duration).mkString("\n")}\n\nNumber of records searched: ${loopOut.map(_.nrecs).sum}\n\nMatching Line Results Directory: <a href="results/">results</a>\n\n*** Results ***\n${formatted}"""
+      val useUrl = false
+      val formatted = if (useUrl) {
+        outcombo.map { case (str, cnt) => s"($cnt) $str ${makeUrl(str)}}" }.mkString("\n")
+      } else {
+        outcombo.map { case (str, cnt) => s"($cnt) $str" }.mkString("\n")
+      }
+      val withDuration = s"""Test run time (seconds): ${loopOut.map(_.duration).mkString("\n")}\n\nNumber of records searched: ${loopOut.map(_.nrecs).sum}\n\nMatching Line Results TextFile: $url/results/$exportFile\nMatching Line Results HadoopFile: $saveFile\n\n*** Results ***\n${formatted}"""
       //      val retMapJson = new JSONObject(Map[String, Long](outcombo:_*))
       //      val ret = retMapJson.toString(JSONFormat.defaultFormatter)
       //      ret
