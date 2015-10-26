@@ -67,7 +67,7 @@ class RootHandler extends HttpHandler {
     var cmdline = mutable.ArrayBuffer(eparams("cmdline").split(" "):_*).map(_.trim).filter(_.length > 0)
     val query = t.getRequestURI.getRawQuery
 //    val query = t.getRequestURI.getRawQuery
-    cmdline ++= Array(eparams("sortBy"),
+    cmdline ++= Array(eparams("sortBy"), eparams("inputFile"),
        eparams("saveFile"), eparams("exportFile"), /* eparams("jsonPos"),eparams("jsonNeg"), */
       s"${t.getRequestURI.toString}",
       if (eparams.contains("searchTerms")) { eparams("searchTerms") }

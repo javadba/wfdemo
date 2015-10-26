@@ -212,17 +212,20 @@ class KeywordsServlet extends KeywordsStack with Serializable with ScalateSuppor
             </td>
           </tr>
           <tr>
+            <td colspan="2">Input file:
+              <input type="text" size="50" name="inputFile" value="/user/stephen/data5gb"/>
+            </td>
             <td width="40%">Save file:
               <input type="text" size="30" name="saveFile" value="results/query"/>
             </td>
             <td width="60%">Export file:
-              <input type="text" size="70" name="exportFile" value="/home/stephen/wfdemo/src/main/webapp/results/queryResults.csv"/>
+              <input type="text" size="70" name="exportFile" value="src/main/webapp/results/queryResults.csv"/>
               <!-- <input type="text" size="30" name="exportFile" value="src/main/webapp/results/queryResults.csv"/> -->
             </td>
           </tr>
           <tr>
             <td colspan="2">Backend/Spark options:
-              <input type="text" size="80" name="cmdline" value="spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data5gb 56 1 true"/>
+              <input type="text" size="80" name="cmdline" value="spark://192.168.15.43:7077 hdfs://i386:9000 56 1 true"/>
               <!-- <input type="text" size="80" name="cmdline" value="local[*] /shared/demo/data/data10m 8 1 true"/> -->
             </td>
           </tr>
