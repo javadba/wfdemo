@@ -54,11 +54,12 @@ object HttpUtils {
     val u = new URL(url)
     val conn = u.openConnection()
     conn.setRequestProperty("User-Agent", httpOpts.userAgent)
+    conn.setRequestProperty("Content-Type", "text/html")
     conn.setConnectTimeout(httpOpts.httpRequestTimeout)
 
-    loadCookies(conn)
+//    loadCookies(conn)
     conn.connect
-    saveCookies(conn)
+//    saveCookies(conn)
     readStream(conn.getInputStream)
   }
 

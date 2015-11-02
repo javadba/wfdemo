@@ -1,5 +1,6 @@
 package com.astralync.demo.spark
 
+import java.net.{URLEncoder, InetAddress}
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -20,6 +21,7 @@ import scala.util.parsing.json._
 object RegexFilters {
 
   val DefaultPort = 8180
+  val WebPort = 9090
   val DefaultCtx = "/"
   var rddData: RDD[String] = _
   var cacheEnabled = true
@@ -27,6 +29,8 @@ object RegexFilters {
   var groupByFields = List[String]()
   val InteractionField = "interaction_created_at"
   val DtNames = s"$InteractionField twitter_user_lang"
+  val SearchTerms="search_terms"
+  val MaxLines = 200
 
   def main(args: Array[String]) = {
     startWebServer
@@ -62,38 +66,42 @@ object RegexFilters {
     sc
   }
 
-  def submit(args: Array[String]) = {
+  def submit(params: Map[String,String]) = {
     try {
-      println(s"Submit entered with ${args.mkString("~")}")
+      println(s"Submit entered with ${params.toSeq.mkString(",")}")
       val DtName = "interaction_created_at"
 
-      if (args.length == 0) {
+      if (params.isEmpty) {
         System.err.println( """Usage: RegexFilters <master> <datadir> <#partitions> <#loops> <cacheEnabled true/false> <groupByFields separated by commas no spaces>
         e.g. RegexFilters spark://192.168.15.43:7077 hdfs://i386:9000/user/stephen/data 56 3 true posregexFile.json negregexfile.json interaction_created_at,state_province""")
         System.exit(1)
       }
       var k = 0
-      val homeDir = "/home/stephen"
-      val master  = args(k); k+=1
-      val namenode = args(k); k+=1
+      val query= params("query")
+      val master  = params("sparkMaster")
+      val namenode = params("nameNode")
 
-      val nparts  = args(k).toInt; k+=1
-      val nloops  = args(k).toInt; k+=1
-      val cacheEnabled = args(k).toBoolean; k+=1
-      val groupByFields = args(k).split(",").toList; k+=1
-      val minCount = args(k).toInt ; k+=1
-      val posKeywords = args(k).split(",").toList; k+=1
-      val posAndOr = args(k); k+=1
-      val negKeywords = args(k).split(",").toList; k+=1
-      val negAndOr = args(k); k+=1
-      val sortBy = args(k); k+=1
+      val nparts  = params("nparts").toInt
+      val nloops  = params("nloops").toInt
+      val cacheEnabled = params("cacheEnabled").equalsIgnoreCase("on")
+      val groupByFields = params("grouping").split(",").toList
+      val minCount = params("minCount").toInt
+      val posKeywords = params("posKeywords").split(" ").toList
+      val posAndOr = params("posKeywordsAndOr")
+      val negKeywords = params("negKeywords").split(" ").toList
+      val negAndOr = params("negKeywordsAndOr")
+      val sortBy = params("sortBy")
       val df = new SimpleDateFormat("MMdd-HHmmss")
-//      val datef = df.format(new java.util.Date())
-      val inputFile = s"$namenode/${args(k)}"; k+=1
-      val saveFile = s"${args(k)}"; k+=1
-      val exportFile = args(k); k+=1
-      val url =  args(k); k+=1
-      val searchTerms =  if (args.length > k) { args(k); k+=1 } else null
+      val datef = df.format(new java.util.Date())
+      val inputFile = s"""$namenode/${params("inputFile")}"""
+      var saveFileBare = params("saveFile")
+      var saveFile = s"$namenode/$saveFileBare"
+      if (saveFile == inputFile) {
+        saveFile = saveFile + datef
+      }
+      val exportFile = params("exportFile")
+      val urlNoRoute =  s"http://${InetAddress.getLocalHost.getHostName}:$WebPort"
+      val url =  s"$urlNoRoute/runQuery"
       println(s"Reading dir=$inputFile using nPartitions=$nparts and caching=$cacheEnabled .. ")
       sc = getSc(master)
       deleteFile(saveFile)
@@ -102,31 +110,45 @@ object RegexFilters {
         rddData.cache()
       }
 
+      val queryParams = query.split("&")
+      val searchTerms :Option[String] = if (params.contains(SearchTerms)) {
+        Some(params(SearchTerms))
+      } else {
+        None
+      }
+      val doDrillDown = !searchTerms.isEmpty
       case class LoopOutput(nrecs: Int, saveDuration: Double, duration: Double)
       val loopOut = mutable.ArrayBuffer[LoopOutput]()
       var countedRdd: Map[String, Long] = null
+      var filteredRdd: RDD[String] = null
       for (nloop <- (0 until nloops)) {
         val saved = new Date
         println(s"** Loop #${nloop + 1} starting at $saved **")
         val resultMap = MMap[String, Any]()
 
-        val bc = sc.broadcast(posKeywords, posAndOr, negKeywords, negAndOr, TwitterLineParser.headers, groupByFields, DtNames,
+        val bc = sc.broadcast(searchTerms, posKeywords, posAndOr, negKeywords, negAndOr, TwitterLineParser.headers, groupByFields, DtNames,
           InteractionField, minCount)
          val accum = sc.accumulator(0)
         val saveFiles = !saveFile.isEmpty || !exportFile.isEmpty
-        val filteredRdd = if (saveFiles) {
+        filteredRdd = if (saveFiles) {
           val savedRdd = rddData.mapPartitionsWithIndex({ case (rx, iter) =>
-            val (locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
+            val (locSearchTerms, locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
             locInteractionField, locMinCount) = bc.value
+            val doDrillDown = !locSearchTerms.isEmpty
 
             assert(locPosKeywords.nonEmpty, "Must supply some positive keywords")
             var nlines = 0
-            val lowerPosKeywords = locPosKeywords.map(_.toLowerCase)
-            val lowerNegKeywords = locNegKeywords.map(_.toLowerCase)
+
+            val (posAndOr, lowerPosKeywords,lowerNegKeywords) = if (doDrillDown) {
+
+              ("AND", locSearchTerms.get.split(" ").toList, locNegKeywords.map(_.toLowerCase))
+            } else {
+              (locPosAndOr, locPosKeywords.map(_.toLowerCase), List[String]())
+            }
             val iterout = iter.map { line =>
               nlines += 1
               //            println(line)
-              val outKeys = if (locPosAndOr.equalsIgnoreCase("OR")) {
+              val outKeys = if (posAndOr.equalsIgnoreCase("OR")) {
                 lowerPosKeywords.filter(line.contains(_))
               } else {
                 val allFound = lowerPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
@@ -174,66 +196,81 @@ object RegexFilters {
         val saveDuration = ((new Date().getTime - saved.getTime) / 100).toInt / 10.0
         val d = new Date
 
-        val groupingInput = if (filteredRdd!=null) filteredRdd else rddData
+        var groupingRdd : RDD[(String,Int)] = null
+        if (!doDrillDown) {
+          val groupingInput = if (filteredRdd!=null) filteredRdd else rddData
 
-        val groupingRdd = groupingInput.mapPartitionsWithIndex({ case (rx, iter) =>
-          val (locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
-          locInteractionField, locMinCount) = bc.value
-          def genKey(k: String, groupingFields: Seq[String], lmap: Map[String, String]) = {
-            if (groupingFields.isEmpty) {
-              k
-            } else {
-              val sortedFields = if (!groupingFields.contains(sortBy)) {
-                System.err.println(s"Must select sortBy field contained in Grouping fields: sortBy=$sortBy")
-                groupingFields
+          groupingRdd = groupingInput.mapPartitionsWithIndex({ case (rx, iter) =>
+            val (locSearchTerms, locPosKeywords, locPosAndOr, locNegKeywords, locNegAndOr, locHeaders, locGroupingFields, locDtNames,
+            locInteractionField, locMinCount) = bc.value
+            def genKey(k: String, groupingFields: Seq[String], lmap: Map[String, String]) = {
+              if (groupingFields.isEmpty) {
+                k
               } else {
-                List(sortBy) ++ groupingFields diff List(sortBy)
-              }
-
-              val groupKey = sortedFields.map { f =>
-                if (!lmap.contains(f)) {
-                  System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
-                  k
+                val sortedFields = if (!groupingFields.contains(sortBy)) {
+                  System.err.println(s"Must select sortBy field contained in Grouping fields: sortBy=$sortBy")
+                  groupingFields
                 } else {
-                  lmap(f)
+                  List(sortBy) ++ groupingFields diff List(sortBy)
                 }
-              }
-              (k +: groupKey).mkString(" ")
-            }
-          }
 
-          val lowerPosKeywords = locPosKeywords.map(_.toLowerCase)
-          val lowerNegKeywords = locNegKeywords.map(_.toLowerCase)
-          val iterout = iter.map { line =>
-            val outKeys = if (locPosAndOr.equalsIgnoreCase("OR")) {
-              lowerPosKeywords.filter(line.contains(_))
-            } else {
-              val allFound = lowerPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
-              if (allFound) {
-                List(lowerPosKeywords.mkString(":"))
-              } else {
-                List[String]()
+                val groupKey = sortedFields.map { f =>
+                  if (!lmap.contains(f)) {
+                    System.err.println(s"key $f not found in lmap=${lmap.mkString(",")}")
+                    k
+                  } else {
+                    lmap(f)
+                  }
+                }
+                (k +: groupKey).mkString(" ")
               }
             }
-              val lmap = TwitterLineParser.parse(line)
-              if (lmap.isDefined) {
-                val o = outKeys.map { k =>
-                  val oval = genKey(k, locGroupingFields, lmap.get)
-                  //                      println(s"accepting line $line")
-                  (oval, 1)
-                }
-                o
+
+            val (lowerPosKeywords,lowerNegKeywords) = if (doDrillDown) {
+              (searchTerms.get.split(",").toList, locNegKeywords.map(_.toLowerCase))
+            } else {
+              (locPosKeywords.map(_.toLowerCase), List[String]())
+            }
+            val iterout = iter.map { line =>
+              val outKeys = if (posAndOr.equalsIgnoreCase("OR")) {
+                lowerPosKeywords.filter(line.contains(_))
               } else {
-                List[(String, Int)]()
+                val allFound = lowerPosKeywords.foldLeft(true) { case (b, k) => b && line.contains(k) }
+                if (allFound) {
+                  List(lowerPosKeywords.mkString(":"))
+                } else {
+                  List[String]()
+                }
               }
-          }
-          iterout
-        }, true).flatMap(identity)
-        val outRdd = groupingRdd // .filter(l => l.length > 0 && !l.isEmpty)
-        val lrdd = outRdd.countByKey()
+                val lmap = TwitterLineParser.parse(line)
+                if (lmap.isDefined) {
+                  val o = outKeys.map { k =>
+                    val oval = genKey(k, locGroupingFields, lmap.get)
+                    //                      println(s"accepting line $line")
+                    (oval, 1)
+                  }
+                  o
+                } else {
+                  List[(String, Int)]()
+                }
+            }
+            iterout
+          }, true).flatMap(identity)
+        }
+        val outRdd = if (!doDrillDown) {
+          groupingRdd
+        } else {
+          filteredRdd
+        }
+        if (!doDrillDown) {
+          val lrdd = groupingRdd.countByKey()
+          val filtered = lrdd.filter { case (k, v) => v >= minCount }
+          countedRdd = Map(filtered.toList: _*)
+        } else {
+          val filteredCount = filteredRdd.count
+          countedRdd = searchTerms.zip(List.fill(searchTerms.size)(filteredCount)).toMap
+        }
         val totalLines = accum.value
-        val filtered = lrdd.filter { case (k, v) => v >= minCount }
-        countedRdd = Map(filtered.toList: _*)
         val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
         loopOut += LoopOutput(totalLines, saveDuration, duration)
         println(s"** RESULT for loop ${nloop + 1}: #recs=$totalLines ${countedRdd.mkString(",")} duration=$duration secs *** ")
@@ -252,19 +289,20 @@ object RegexFilters {
         }
       }
       @inline def makeUrl(str: String) = {
-        s"""</pre><a href="$url&search_terms=${str.replace(" ",",")}">Details</a><pre>"""
+        s"""$url?inputFile=${URLEncoder.encode(saveFileBare)}&$SearchTerms=${URLEncoder.encode(str).replace(" ",",")}&$query"""
       }
-      val useUrl = false
-      val formatted = if (useUrl) {
-        outcombo.map { case (str, cnt) => s"($cnt) $str ${makeUrl(str)}}" }.mkString("\n")
+      val useUrl = true
+      val filteredLines = filteredRdd.take(MaxLines).mkString("\n")
+      val formatted = (if (useUrl) {
+        outcombo.map { case (str, cnt) =>
+          s"""<tr><td>$cnt</td><td><a href="${makeUrl(str)}">$str</a></td></tr>"""}
+          .mkString("""<table border="0">""","\n","""</table>""")
       } else {
         outcombo.map { case (str, cnt) => s"($cnt) $str" }.mkString("\n")
-      }
-      val outFileLink = s"$url/results/${exportFile.substring(exportFile.lastIndexOf("/")+1)}"
-      val withDuration = s"""Test run time (seconds): ${loopOut.map(_.duration).mkString("\n")}\n\nTest save records time (seconds): ${loopOut.map(_.saveDuration).mkString("\n")}\n\nNumber of records searched: ${loopOut.map(_.nrecs).sum}\n\nMatching Line Results TextFile: $outFileLink\nMatching Line Results HadoopFile: $saveFile\n\n*** Results ***\n${formatted}"""
-      //      val retMapJson = new JSONObject(Map[String, Long](outcombo:_*))
-      //      val ret = retMapJson.toString(JSONFormat.defaultFormatter)
-      //      ret
+      }) + s"\n<pre>${filteredLines}</pre>"
+
+      val outFileLink = s"$urlNoRoute/results/${exportFile.substring(exportFile.lastIndexOf("/")+1)}"
+      val withDuration = s"""<br/><p>Test run time (seconds): ${loopOut.map(_.duration).mkString("\n")}</p>\n\n<p>Test save records time (seconds): ${loopOut.map(_.saveDuration).mkString("\n")}</p>\n\n<p>Number of records searched: ${loopOut.map(_.nrecs).sum}</p>\n\n<p><a href="$outFileLink">Matching Line Results TextFile</a></p>\n<p>Matching Line Results HadoopFile: <input type="text" size="80" disabled="disabled" value="hdfs dfs -text $saveFile/*"/></p><p>*** Results ***</p>${formatted}"""
       withDuration
     } catch {
       case e: Exception => println(s"Caught ${e.getMessage}"); e.printStackTrace; e.getMessage

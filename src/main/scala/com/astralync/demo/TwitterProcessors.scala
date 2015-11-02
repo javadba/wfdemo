@@ -39,7 +39,8 @@ object TwitterLineParser {
   def parse(iline: String): Option[Map[String, String]] = {
     val line = iline.trim
     def formatDate(dt: String) = {
-      s"${dt.slice(0, 4)}-${dt.slice(8, 10)}-${dt.slice(5, 7)}"
+      // 2015-01-05
+      s"${dt.slice(0, 4)}-${dt.slice(5, 7)}-${dt.slice(8, 10)}"
     }
     if (line.length == 0 || line.count(c => c == ',') != headers.size) {
       None
