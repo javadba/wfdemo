@@ -271,14 +271,14 @@ object RegexFilters {
           countedRdd = searchTerms.zip(List.fill(searchTerms.size)(filteredCount)).toMap
         }
         val totalLines = accum.value
-        val duration = ((new Date().getTime - d.getTime) / 100).toInt / 10.0
+        val duration = math.max(((new Date().getTime - d.getTime) / 1000), 0.001)
         loopOut += LoopOutput(totalLines, saveDuration, duration)
         println(s"** RESULT for loop ${nloop + 1}: #recs=$totalLines ${countedRdd.mkString(",")} duration=$duration secs *** ")
         if (!cacheEnabled) {
           rddData = null
         }
       }
-      println(s"** Test Completed. Loop durations=${loopOut.map(_.toString).mkString(",")} ** ")
+      println(s"** Search Completed. Search durations=${loopOut.map(_.toString).mkString(",")} ** ")
       val cseq = countedRdd.toSeq
       val combo = /* dseq ++ */ cseq
       val outcombo = combo.sortWith { case ((astr, acnt), (bstr, bcnt)) =>
@@ -302,7 +302,7 @@ object RegexFilters {
       }) + s"\n<pre>${filteredLines}</pre>"
 
       val outFileLink = s"$urlNoRoute/results/${exportFile.substring(exportFile.lastIndexOf("/")+1)}"
-      val withDuration = s"""<br/><p>Test run time (seconds): ${loopOut.map(_.duration).mkString("\n")}</p>\n\n<p>Test save records time (seconds): ${loopOut.map(_.saveDuration).mkString("\n")}</p>\n\n<p>Number of records searched: ${loopOut.map(_.nrecs).sum}</p>\n\n<p><a href="$outFileLink">Matching Line Results TextFile</a></p>\n<p>Matching Line Results HadoopFile: <input type="text" size="80" disabled="disabled" value="hdfs dfs -text $saveFile/*"/></p><p>*** Results ***</p>${formatted}"""
+      val withDuration = s"""<br/><p>Search time: <font color="RED">${loopOut.map(_.duration).mkString(" ")}</font> seconds</p>\n\n<p>Search save records time (seconds): ${loopOut.map(_.saveDuration).mkString("\n")}</p>\n\n<p>Searched records: ${loopOut.map(_.nrecs).sum}</p>\n\n<p><a href="$outFileLink">Search Results CSV File</a></p>\n<p>Search Results Saved on Cluster: <input type="text" size="80" disabled="disabled" value="hdfs dfs -text $saveFile/*"/></p><p>*** Results ***</p>${formatted}"""
       withDuration
     } catch {
       case e: Exception => println(s"Caught ${e.getMessage}"); e.printStackTrace; e.getMessage
