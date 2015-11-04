@@ -66,6 +66,8 @@ object RegexFilters {
     sc
   }
 
+  val MaxLinestoExport: Int = 5e6
+
   def submit(params: Map[String,String]) = {
     try {
       println(s"Submit entered with ${params.toSeq.mkString(",")}")
@@ -185,7 +187,7 @@ object RegexFilters {
             println(s"Saved ${accum.value} lines to $saveFile")
           }
           if (!exportFile.isEmpty) {
-            val results = savedRdd.collect.mkString("\n")
+            val results = savedRdd.take(MaxLinestoExport).mkString("\n")
             tools.nsc.io.File(exportFile).writeAll(results)
             println(s"Saved ${accum.value} lines to $exportFile")
           }
