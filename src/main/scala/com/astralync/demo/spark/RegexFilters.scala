@@ -294,9 +294,17 @@ object RegexFilters {
       val useUrl = true
       val filteredLines = filteredRdd.take(MaxLines).mkString("\n")
       val formatted = (if (useUrl) {
-        outcombo.map { case (str, cnt) =>
-          s"""<tr><td>$cnt</td><td><a href="${makeUrl(str)}">$str</a></td></tr>"""}
-          .mkString("""<table border="0">""","\n","""</table>""")
+        if (!doDrillDown) {
+          outcombo.map { case (str, cnt) =>
+            s"""<tr><td>$cnt</td><td><a href="${makeUrl(str)}">$str</a></td></tr>"""
+          }
+            .mkString( """<table border="0">""", "\n", """</table>""")
+        } else {
+          outcombo.map { case (str, cnt) =>
+            s"""<tr><td><a href="${makeUrl(str)}">$str</a></td></tr>"""
+          }
+            .mkString( """<table border="0">""", "\n", """</table>""")
+        }
       } else {
         outcombo.map { case (str, cnt) => s"($cnt) $str" }.mkString("\n")
       }) + s"\n<pre>${filteredLines}</pre>"
