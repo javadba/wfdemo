@@ -66,7 +66,7 @@ object RegexFilters {
     sc
   }
 
-  val MaxLinestoExport: Int = 5e6
+  val MaxLinestoExport: Int = 1e6.toInt
 
   def submit(params: Map[String,String]) = {
     try {
